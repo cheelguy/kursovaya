@@ -1,0 +1,5084 @@
+﻿using ReactiveUI;
+
+namespace UniversityIS.ViewModels;
+
+// Базовый класс для всех ViewModel в приложении
+// Наследуется от ReactiveObject для поддержки реактивного программирования
+// Все ViewModel должны наследоваться от этого класса
+public class ViewModelBase : ReactiveObject
+{
+}
+using System;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+namespace UniversityIS.ViewModels
+{
+    // ViewModel для профиля преподавателя
+    // Управляет списком дисциплин, которые ведет преподаватель
+    // Позволяет добавлять и удалять дисциплины из профиля преподавателя
+    public class TeacherProfileViewModel : ViewModelBase
+    {
+        private readonly DataService _dataService;
+        private readonly Teacher _teacher;
+        private Discipline? _selectedDisciplineToAdd;
+        private TeacherDiscipline? _selectedTeacherDiscipline;
+        private string _errorMessage = string.Empty;
+        private ObservableCollection<Discipline> _availableDisciplines = new();
+        private ObservableCollection<Discipline> _teacherDisciplines = new();
+        public TeacherProfileViewModel(DataService dataService, Teacher teacher)
+        {
+            _dataService = dataService;
+            _teacher = teacher;
+            AddDisciplineCommand = ReactiveCommand.Create(AddDiscipline, outputScheduler: RxApp.MainThreadScheduler);
+            RemoveDisciplineCommand = ReactiveCommand.Create(RemoveDiscipline, outputScheduler: RxApp.MainThreadScheduler);
+            // Подписываемся на изменения для обновления списков
+            _dataService.TeacherDisciplines.CollectionChanged += (s, e) => LoadTeacherDisciplines();
+            _dataService.Disciplines.CollectionChanged += (s, e) => LoadAvailableDisciplines();
+            LoadTeacherDisciplines();
+            LoadAvailableDisciplines();
+        }
+        public string TeacherName => _teacher.FullName;
+        public string Position => _teacher.Position.ToString();
+        public string Department
+        {
+            get
+            {
+                var dept = _dataService.GetDepartment(_teacher.DepartmentId);
+                return dept?.Name ?? "Кафедра не найдена";
+            }
+        }
+        public ObservableCollection<Discipline> AvailableDisciplines
+        {
+            get => _availableDisciplines;
+            set => this.RaiseAndSetIfChanged(ref _availableDisciplines, value);
+        }
+        public ObservableCollection<Discipline> TeacherDisciplines
+        {
+            get => _teacherDisciplines;
+            set => this.RaiseAndSetIfChanged(ref _teacherDisciplines, value);
+        }
+        public Discipline? SelectedDisciplineToAdd
+        {
+            get => _selectedDisciplineToAdd;
+            set => this.RaiseAndSetIfChanged(ref _selectedDisciplineToAdd, value);
+        }
+        public TeacherDiscipline? SelectedTeacherDiscipline
+        {
+            get => _selectedTeacherDiscipline;
+            set => this.RaiseAndSetIfChanged(ref _selectedTeacherDiscipline, value);
+        }
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
+        }
+        public ReactiveCommand<Unit, Unit> AddDisciplineCommand { get; }
+        public ReactiveCommand<Unit, Unit> RemoveDisciplineCommand { get; }
+        private void LoadTeacherDisciplines()
+        {
+            var disciplineIds = _dataService.TeacherDisciplines
+                .Where(td => td.TeacherId == _teacher.Id)
+                .Select(td => td.DisciplineId)
+                .ToList();
+            var disciplines = disciplineIds
+                .Select(id => _dataService.GetDiscipline(id))
+                .Where(d => d != null)
+                .OrderBy(d => d!.Name)
+                .ToList();
+            TeacherDisciplines = new ObservableCollection<Discipline>(disciplines!);
+            LoadAvailableDisciplines();
+        }
+        private void LoadAvailableDisciplines()
+        {
+            var teacherDisciplineIds = _dataService.TeacherDisciplines
+                .Where(td => td.TeacherId == _teacher.Id)
+                .Select(td => td.DisciplineId)
+                .ToHashSet();
+            var available = _dataService.Disciplines
+                .Where(d => !teacherDisciplineIds.Contains(d.Id))
+                .OrderBy(d => d.Name)
+                .ToList();
+            AvailableDisciplines = new ObservableCollection<Discipline>(available);
+        }
+        private void AddDiscipline()
+        {
+            ErrorMessage = string.Empty;
+            if (SelectedDisciplineToAdd == null)
+            {
+                ErrorMessage = "Выберите дисциплину для добавления.";
+                return;
+            }
+            // Проверяем, не добавлена ли уже эта дисциплина
+            var exists = _dataService.TeacherDisciplines.Any(td =>
+                td.TeacherId == _teacher.Id &&
+                td.DisciplineId == SelectedDisciplineToAdd.Id);
+            if (exists)
+            {
+                ErrorMessage = "Эта дисциплина уже добавлена для данного преподавателя.";
+                return;
+            }
+            var teacherDiscipline = new TeacherDiscipline
+            {
+                TeacherId = _teacher.Id,
+                DisciplineId = SelectedDisciplineToAdd.Id
+            };
+            _dataService.TeacherDisciplines.Add(teacherDiscipline);
+            SelectedDisciplineToAdd = null;
+        }
+        private void RemoveDiscipline()
+        {
+            ErrorMessage = string.Empty;
+            if (SelectedTeacherDiscipline == null)
+            {
+                ErrorMessage = "Выберите дисциплину для удаления.";
+                return;
+            }
+            var toRemove = _dataService.TeacherDisciplines.FirstOrDefault(td =>
+                td.TeacherId == _teacher.Id &&
+                td.DisciplineId == SelectedTeacherDiscipline.Id);
+            if (toRemove != null)
+            {
+                _dataService.TeacherDisciplines.Remove(toRemove);
+                SelectedTeacherDiscipline = null;
+            }
+        }
+    }
+}
+using System;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+using UniversityIS.Helpers;
+namespace UniversityIS.ViewModels
+{
+    // ViewModel для управления факультетами
+    // Позволяет добавлять, редактировать и удалять факультеты
+    public class FacultiesViewModel : ViewModelBase
+    {
+        private readonly DataService _dataService;
+        private Faculty? _selectedFaculty;
+        private string _name = string.Empty;
+        private string _dean = string.Empty;
+        private string _errorMessage = string.Empty;
+        
+        public FacultiesViewModel(DataService dataService)
+        {
+            _dataService = dataService;
+            
+            AddCommand = ReactiveCommand.Create(AddFaculty, outputScheduler: RxApp.MainThreadScheduler);
+            UpdateCommand = ReactiveCommand.Create(UpdateFaculty, outputScheduler: RxApp.MainThreadScheduler);
+            DeleteCommand = ReactiveCommand.Create(DeleteFaculty, outputScheduler: RxApp.MainThreadScheduler);
+        }
+        
+        public ObservableCollection<Faculty> Faculties => _dataService.Faculties;
+        
+        public Faculty? SelectedFaculty
+        {
+            get => _selectedFaculty;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedFaculty, value);
+                if (value != null)
+                {
+                    Name = value.Name;
+                    Dean = value.Dean;
+                }
+            }
+        }
+        
+        public string Name
+        {
+            get => _name;
+            set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+        
+        public string Dean
+        {
+            get => _dean;
+            set => this.RaiseAndSetIfChanged(ref _dean, value);
+        }
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
+        }
+        
+        public ReactiveCommand<Unit, Unit> AddCommand { get; }
+        public ReactiveCommand<Unit, Unit> UpdateCommand { get; }
+        public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+        
+        // Добавляет новый факультет в базу данных
+        // Выполняет валидацию всех полей перед добавлением
+        private void AddFaculty()
+        {
+            ErrorMessage = string.Empty;
+            // Валидация названия факультета
+            if (string.IsNullOrWhiteSpace(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название факультета", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название факультета", "invalid_name");
+                return;
+            }
+            // Валидация ФИО декана
+            if (string.IsNullOrWhiteSpace(Dean))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("ФИО декана", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(Dean))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("ФИО декана", "invalid_name");
+                return;
+            }
+            
+            // Создаем новый факультет и добавляем в коллекцию
+            var faculty = new Faculty
+            {
+                Name = Name,
+                Dean = Dean
+            };
+            
+            _dataService.Faculties.Add(faculty);
+            
+            ClearFields();
+        }
+        
+        private void UpdateFaculty()
+        {
+            ErrorMessage = string.Empty;
+            if (SelectedFaculty == null)
+            {
+                ErrorMessage = "Выберите факультет для обновления.";
+                return;
+            }
+            // Валидация названия факультета
+            if (string.IsNullOrWhiteSpace(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название факультета", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название факультета", "invalid_name");
+                return;
+            }
+            // Валидация ФИО декана
+            if (string.IsNullOrWhiteSpace(Dean))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("ФИО декана", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(Dean))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("ФИО декана", "invalid_name");
+                return;
+            }
+            
+            SelectedFaculty.Name = Name;
+            SelectedFaculty.Dean = Dean;
+            
+            // Обновляем отображение
+            var index = Faculties.IndexOf(SelectedFaculty);
+            if (index >= 0)
+            {
+                Faculties[index] = SelectedFaculty;
+            }
+        }
+        
+        private void DeleteFaculty()
+        {
+            if (SelectedFaculty == null) return;
+            
+            _dataService.Faculties.Remove(SelectedFaculty);
+            Faculties.Remove(SelectedFaculty);
+            
+            ClearFields();
+        }
+        
+        private void ClearFields()
+        {
+            Name = string.Empty;
+            Dean = string.Empty;
+            SelectedFaculty = null;
+            ErrorMessage = string.Empty;
+        }
+    }
+}
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+using UniversityIS.Views;
+namespace UniversityIS.ViewModels
+{
+    // Обертка для дисциплины с текстом оценки
+    // Используется для отображения дисциплины вместе с оценкой студента в профиле
+    public class DisciplineWithGrade
+    {
+        public DisciplineWithGrade(Discipline discipline, string gradeText)
+        {
+            Discipline = discipline;
+            GradeText = gradeText;
+        }
+        public Discipline Discipline { get; }
+        public string GradeText { get; }
+    }
+    // Группа дисциплин, объединенных по семестру
+    // Используется для отображения пройденных предметов с группировкой по семестрам
+    public class SemesterGroup
+    {
+        public SemesterGroup(int semester, IEnumerable<DisciplineWithGrade> disciplines)
+        {
+            Semester = semester;
+            Disciplines = new ObservableCollection<DisciplineWithGrade>(disciplines);
+        }
+        public int Semester { get; }
+        public string SemesterName => $"{Semester} семестр ({(Semester + 1) / 2} курс)";
+        public ObservableCollection<DisciplineWithGrade> Disciplines { get; }
+    }
+    // ViewModel для профиля студента
+    // Отображает информацию о студенте, его группе и дисциплинах
+    // Разделяет дисциплины на пройденные, текущие и будущие
+    public class StudentProfileViewModel : ViewModelBase
+    {
+        private readonly DataService _dataService;
+        private readonly Student _student;
+        private Models.Group? _group;
+        private int _currentSemester;
+        private ObservableCollection<SemesterGroup> _completedDisciplines = new();
+        private ObservableCollection<DisciplineWithGrade> _currentDisciplines = new();
+        private ObservableCollection<DisciplineWithGrade> _futureDisciplines = new();
+        public StudentProfileViewModel(DataService dataService, Student student)
+        {
+            _dataService = dataService;
+            _student = student;
+            
+            CloseCommand = ReactiveCommand.Create(() => { });
+            OpenGradeInputCommand = ReactiveCommand.Create<DisciplineWithGrade>(OpenGradeInput, outputScheduler: RxApp.MainThreadScheduler);
+            
+            LoadStudentData();
+            
+            // Подписываемся на изменения оценок для обновления отображения
+            _dataService.Grades.CollectionChanged += (s, e) => LoadStudentData();
+        }
+        public Student Student => _student;
+        public string FullName => $"{_student.LastName} {_student.FirstName} {_student.MiddleName}".Trim();
+        
+        public string GroupName => _group?.Number ?? "Группа не найдена";
+        
+        public int CurrentSemester
+        {
+            get => _currentSemester;
+            set => this.RaiseAndSetIfChanged(ref _currentSemester, value);
+        }
+        public ObservableCollection<SemesterGroup> CompletedDisciplines
+        {
+            get => _completedDisciplines;
+            set => this.RaiseAndSetIfChanged(ref _completedDisciplines, value);
+        }
+        public ObservableCollection<DisciplineWithGrade> CurrentDisciplines
+        {
+            get => _currentDisciplines;
+            set => this.RaiseAndSetIfChanged(ref _currentDisciplines, value);
+        }
+        public ObservableCollection<DisciplineWithGrade> FutureDisciplines
+        {
+            get => _futureDisciplines;
+            set => this.RaiseAndSetIfChanged(ref _futureDisciplines, value);
+        }
+        public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+        public ReactiveCommand<DisciplineWithGrade, Unit> OpenGradeInputCommand { get; }
+        // Возвращает текстовое представление оценки студента по указанной дисциплине
+        // Если оценка не выставлена, возвращает "Оценка не выставлена"
+        public string GetGradeForDiscipline(Guid disciplineId)
+        {
+            var grade = _dataService.Grades.FirstOrDefault(g => 
+                g.StudentId == _student.Id && g.DisciplineId == disciplineId);
+            
+            return grade != null ? $"{grade.TotalPoints} б. - {grade.Grade}" : "Оценка не выставлена";
+        }
+        // Открывает окно для ввода/редактирования оценки по выбранной дисциплине
+        // Окно открывается модально поверх главного окна приложения
+        private async void OpenGradeInput(DisciplineWithGrade disciplineWithGrade)
+        {
+            var viewModel = new GradeInputViewModel(_dataService, _student, disciplineWithGrade.Discipline);
+            var window = new GradeInputWindow
+            {
+                DataContext = viewModel
+            };
+            
+            // Получаем главное окно приложения для модального отображения
+            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                await window.ShowDialog(desktop.MainWindow);
+            }
+        }
+        // Загружает и обрабатывает данные студента для отображения в профиле
+        // Определяет текущий семестр на основе времени года и курса
+        // Разделяет дисциплины на пройденные, текущие и будущие
+        private void LoadStudentData()
+        {
+            // Получаем группу студента
+            _group = _dataService.GetGroup(_student.GroupId);
+            if (_group == null) return;
+            // Вычисляем текущий семестр группы с учетом времени года
+            // Сентябрь (9) - Январь (1): нечетный семестр (1, 3, 5, 7, 9)
+            // Февраль (2) - Август (8): четный семестр (2, 4, 6, 8, 10)
+            var currentMonth = DateTime.Now.Month;
+            bool isFirstHalfOfYear = currentMonth >= 9 || currentMonth <= 1; // сентябрь-январь
+            
+            if (isFirstHalfOfYear)
+            {
+                // Первая половина учебного года - нечетный семестр
+                CurrentSemester = _group.Course * 2 - 1;
+            }
+            else
+            {
+                // Вторая половина учебного года - четный семестр
+                CurrentSemester = _group.Course * 2;
+            }
+            // Получаем все дисциплины группы и сортируем по семестру и названию
+            var groupDisciplines = _dataService.Disciplines
+                .Where(d => d.GroupId == _group.Id)
+                .OrderBy(d => d.Semester)
+                .ThenBy(d => d.Name)
+                .ToList();
+            // Разделяем дисциплины на три категории: пройденные, текущие и будущие
+            var completedDiscs = groupDisciplines.Where(d => d.Semester < CurrentSemester).ToList();
+            
+            // Группируем пройденные предметы по семестрам с оценками
+            // Каждый семестр отображается отдельной группой
+            var completedGrouped = completedDiscs
+                .GroupBy(d => d.Semester)
+                .OrderBy(g => g.Key)
+                .Select(g => new SemesterGroup(g.Key, 
+                    g.OrderBy(d => d.Name)
+                     .Select(d => new DisciplineWithGrade(d, GetGradeForDiscipline(d.Id)))))
+                .ToList();
+            
+            CompletedDisciplines = new ObservableCollection<SemesterGroup>(completedGrouped);
+            // Текущие дисциплины - только те, что в текущем семестре
+            CurrentDisciplines = new ObservableCollection<DisciplineWithGrade>(
+                groupDisciplines.Where(d => d.Semester == CurrentSemester)
+                    .Select(d => new DisciplineWithGrade(d, GetGradeForDiscipline(d.Id)))
+            );
+            // Будущие дисциплины - те, что в семестрах после текущего
+            FutureDisciplines = new ObservableCollection<DisciplineWithGrade>(
+                groupDisciplines.Where(d => d.Semester > CurrentSemester)
+                    .Select(d => new DisciplineWithGrade(d, GetGradeForDiscipline(d.Id)))
+            );
+        }
+    }
+}
+using System;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+using UniversityIS.Helpers;
+namespace UniversityIS.ViewModels
+{
+    // Группа дисциплин, объединенных по группе
+    // Используется для отображения дисциплин с группировкой по группам
+    public class GroupDisciplines
+    {
+        public string GroupName { get; set; } = string.Empty;
+        public ObservableCollection<Discipline> Disciplines { get; set; } = new();
+    }
+    // ViewModel для управления дисциплинами
+    // Позволяет добавлять, редактировать и удалять дисциплины
+    // Автоматически вычисляет курс на основе семестра
+    // Группирует дисциплины по группам для удобного отображения
+    public class DisciplinesViewModel : ViewModelBase
+    {
+        private readonly DataService _dataService;
+        private Discipline? _selectedDiscipline;
+        private string _name = string.Empty;
+        private int _course = 1;
+        private int _semester = 1;
+        private int _lectureHours = 0;
+        private int _seminarHours = 0;
+        private int _laboratoryHours = 0;
+        private ControlForm _controlForm = ControlForm.Exam;
+        private EnumItem<ControlForm>? _selectedControlFormItem;
+        private string _errorMessage = string.Empty;
+        private Models.Group? _selectedGroup;
+        private ObservableCollection<GroupDisciplines> _groupedDisciplines = new();
+        
+        public DisciplinesViewModel(DataService dataService)
+        {
+            _dataService = dataService;
+            ControlForms = new ObservableCollection<EnumItem<ControlForm>>(EnumHelper.GetControlForms());
+            
+            AddCommand = ReactiveCommand.Create(AddDiscipline, outputScheduler: RxApp.MainThreadScheduler);
+            UpdateCommand = ReactiveCommand.Create(UpdateDiscipline, outputScheduler: RxApp.MainThreadScheduler);
+            DeleteCommand = ReactiveCommand.Create(DeleteDiscipline, outputScheduler: RxApp.MainThreadScheduler);
+            
+            // Подписываемся на изменения для обновления группировки
+            _dataService.Disciplines.CollectionChanged += (s, e) => UpdateGroupedDisciplines();
+            _dataService.Groups.CollectionChanged += (s, e) => UpdateGroupedDisciplines();
+            
+            UpdateGroupedDisciplines();
+        }
+        
+        public ObservableCollection<Discipline> Disciplines => _dataService.Disciplines;
+        public ObservableCollection<Models.Group> Groups => _dataService.Groups;
+        public ObservableCollection<EnumItem<ControlForm>> ControlForms { get; }
+        public ObservableCollection<GroupDisciplines> GroupedDisciplines
+        {
+            get => _groupedDisciplines;
+            set => this.RaiseAndSetIfChanged(ref _groupedDisciplines, value);
+        }
+        
+        public Discipline? SelectedDiscipline
+        {
+            get => _selectedDiscipline;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedDiscipline, value);
+                if (value != null)
+                {
+                    Name = value.Name;
+                    Course = value.Course;
+                    Semester = value.Semester;
+                    LectureHours = value.LectureHours;
+                    SeminarHours = value.SeminarHours;
+                    LaboratoryHours = value.LaboratoryHours;
+                    ControlForm = value.ControlForm;
+                    SelectedControlFormItem = ControlForms.FirstOrDefault(x => x.Value == value.ControlForm);
+                    SelectedGroup = _dataService.GetGroup(value.GroupId);
+                }
+            }
+        }
+        
+        public string Name
+        {
+            get => _name;
+            set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+        
+        public int Course
+        {
+            get => _course;
+            set => this.RaiseAndSetIfChanged(ref _course, value);
+        }
+        
+        public int Semester
+        {
+            get => _semester;
+            set => this.RaiseAndSetIfChanged(ref _semester, value);
+        }
+        
+        public int LectureHours
+        {
+            get => _lectureHours;
+            set => this.RaiseAndSetIfChanged(ref _lectureHours, value);
+        }
+        
+        public int SeminarHours
+        {
+            get => _seminarHours;
+            set => this.RaiseAndSetIfChanged(ref _seminarHours, value);
+        }
+        
+        public int LaboratoryHours
+        {
+            get => _laboratoryHours;
+            set => this.RaiseAndSetIfChanged(ref _laboratoryHours, value);
+        }
+        
+        public ControlForm ControlForm
+        {
+            get => _controlForm;
+            set => this.RaiseAndSetIfChanged(ref _controlForm, value);
+        }
+        
+        public EnumItem<ControlForm>? SelectedControlFormItem
+        {
+            get => _selectedControlFormItem;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedControlFormItem, value);
+                if (value != null)
+                    ControlForm = value.Value;
+            }
+        }
+        public Models.Group? SelectedGroup
+        {
+            get => _selectedGroup;
+            set => this.RaiseAndSetIfChanged(ref _selectedGroup, value);
+        }
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
+        }
+        
+        public ReactiveCommand<Unit, Unit> AddCommand { get; }
+        public ReactiveCommand<Unit, Unit> UpdateCommand { get; }
+        public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+        
+        private void AddDiscipline()
+        {
+            ErrorMessage = string.Empty;
+            // Валидация группы
+            if (SelectedGroup == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Группа", "not_selected");
+                return;
+            }
+            // Валидация названия дисциплины
+            if (string.IsNullOrWhiteSpace(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название дисциплины", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidNameWithNumbers(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название дисциплины", "invalid_name_with_numbers");
+                return;
+            }
+            // Валидация курса
+            if (!ValidationHelper.IsValidCourse(Course.ToString()))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Курс", "invalid_course");
+                return;
+            }
+            // Валидация семестра
+            if (Semester < 1 || Semester > 12)
+            {
+                ErrorMessage = "Поле \"Семестр\" должно быть числом от 1 до 12.";
+                return;
+            }
+            // Валидация часов лекций
+            if (LectureHours < 0 || LectureHours > 1000)
+            {
+                ErrorMessage = "Поле \"Часы лекций\" должно быть от 0 до 1000.";
+                return;
+            }
+            // Валидация часов семинаров
+            if (SeminarHours < 0 || SeminarHours > 1000)
+            {
+                ErrorMessage = "Поле \"Часы семинаров\" должно быть от 0 до 1000.";
+                return;
+            }
+            // Валидация часов лабораторных
+            if (LaboratoryHours < 0 || LaboratoryHours > 1000)
+            {
+                ErrorMessage = "Поле \"Часы лабораторных\" должно быть от 0 до 1000.";
+                return;
+            }
+            // Проверка, что хотя бы один тип занятий имеет часы
+            if (LectureHours == 0 && SeminarHours == 0 && LaboratoryHours == 0)
+            {
+                ErrorMessage = "Хотя бы один тип занятий должен иметь ненулевое количество часов.";
+                return;
+            }
+            
+            var discipline = new Discipline
+            {
+                Name = Name,
+                LectureHours = LectureHours,
+                SeminarHours = SeminarHours,
+                LaboratoryHours = LaboratoryHours,
+                ControlForm = ControlForm,
+                GroupId = SelectedGroup.Id
+            };
+            
+            // Устанавливаем семестр и автоматически вычисляем курс
+            discipline.SetSemester(Semester);
+            
+            _dataService.Disciplines.Add(discipline);
+            
+            ClearFields();
+        }
+        
+        private void UpdateDiscipline()
+        {
+            ErrorMessage = string.Empty;
+            if (SelectedDiscipline == null)
+            {
+                ErrorMessage = "Выберите дисциплину для обновления.";
+                return;
+            }
+            // Валидация группы
+            if (SelectedGroup == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Группа", "not_selected");
+                return;
+            }
+            // Валидация названия дисциплины
+            if (string.IsNullOrWhiteSpace(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название дисциплины", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidNameWithNumbers(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название дисциплины", "invalid_name_with_numbers");
+                return;
+            }
+            // Валидация семестра
+            if (!ValidationHelper.IsValidSemester(Semester.ToString()))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Семестр", "invalid_semester");
+                return;
+            }
+            // Валидация часов лекций
+            if (LectureHours < 0 || LectureHours > 1000)
+            {
+                ErrorMessage = "Поле \"Часы лекций\" должно быть от 0 до 1000.";
+                return;
+            }
+            // Валидация часов семинаров
+            if (SeminarHours < 0 || SeminarHours > 1000)
+            {
+                ErrorMessage = "Поле \"Часы семинаров\" должно быть от 0 до 1000.";
+                return;
+            }
+            // Валидация часов лабораторных
+            if (LaboratoryHours < 0 || LaboratoryHours > 1000)
+            {
+                ErrorMessage = "Поле \"Часы лабораторных\" должно быть от 0 до 1000.";
+                return;
+            }
+            // Проверка, что хотя бы один тип занятий имеет часы
+            if (LectureHours == 0 && SeminarHours == 0 && LaboratoryHours == 0)
+            {
+                ErrorMessage = "Хотя бы один тип занятий должен иметь ненулевое количество часов.";
+                return;
+            }
+            
+            SelectedDiscipline.Name = Name;
+            SelectedDiscipline.LectureHours = LectureHours;
+            SelectedDiscipline.SeminarHours = SeminarHours;
+            SelectedDiscipline.LaboratoryHours = LaboratoryHours;
+            SelectedDiscipline.ControlForm = ControlForm;
+            SelectedDiscipline.GroupId = SelectedGroup.Id;
+            
+            // Устанавливаем семестр и автоматически вычисляем курс
+            SelectedDiscipline.SetSemester(Semester);
+            
+            var index = Disciplines.IndexOf(SelectedDiscipline);
+            if (index >= 0)
+            {
+                Disciplines[index] = SelectedDiscipline;
+            }
+        }
+        
+        private void DeleteDiscipline()
+        {
+            if (SelectedDiscipline == null) return;
+            
+            _dataService.Disciplines.Remove(SelectedDiscipline);
+            Disciplines.Remove(SelectedDiscipline);
+            
+            ClearFields();
+        }
+        
+        private void ClearFields()
+        {
+            Name = string.Empty;
+            Course = 1;
+            Semester = 1;
+            LectureHours = 0;
+            SeminarHours = 0;
+            LaboratoryHours = 0;
+            ControlForm = ControlForm.Exam;
+            SelectedGroup = null;
+            SelectedDiscipline = null;
+            ErrorMessage = string.Empty;
+        }
+        private void UpdateGroupedDisciplines()
+        {
+            var groups = new ObservableCollection<GroupDisciplines>();
+            
+            // Группируем дисциплины по группам
+            var disciplinesByGroup = _dataService.Disciplines
+                .GroupBy(d => d.GroupId)
+                .OrderBy(g => _dataService.GetGroup(g.Key)?.Number ?? "Неизвестная группа");
+            
+            foreach (var group in disciplinesByGroup)
+            {
+                var groupObj = _dataService.GetGroup(group.Key);
+                if (groupObj == null) continue;
+                
+                var groupDisciplines = new GroupDisciplines
+                {
+                    GroupName = groupObj.Number,
+                    Disciplines = new ObservableCollection<Discipline>(group.OrderBy(d => d.Name))
+                };
+                groups.Add(groupDisciplines);
+            }
+            
+            GroupedDisciplines = groups;
+        }
+    }
+}
+using System;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+using UniversityIS.Helpers;
+namespace UniversityIS.ViewModels
+{
+    // ViewModel для управления дипломными работами
+    // Позволяет добавлять, редактировать и удалять дипломные работы
+    // Валидирует, что научный руководитель имеет право руководить дипломными работами
+    public class ThesisWorksViewModel : ViewModelBase
+    {
+        private readonly DataService _dataService;
+        private ThesisWork? _selectedThesisWork;
+        private string _title = string.Empty;
+        private Student? _selectedStudent;
+        private Teacher? _selectedSupervisor;
+        private int _year = DateTime.Now.Year;
+        private int? _grade;
+        private string _errorMessage = string.Empty;
+        
+        public ThesisWorksViewModel(DataService dataService)
+        {
+            _dataService = dataService;
+            
+            AddCommand = ReactiveCommand.Create(AddThesisWork, outputScheduler: RxApp.MainThreadScheduler);
+            UpdateCommand = ReactiveCommand.Create(UpdateThesisWork, outputScheduler: RxApp.MainThreadScheduler);
+            DeleteCommand = ReactiveCommand.Create(DeleteThesisWork, outputScheduler: RxApp.MainThreadScheduler);
+        }
+        
+        public ObservableCollection<ThesisWork> ThesisWorks => _dataService.ThesisWorks;
+        public ObservableCollection<Student> Students => _dataService.Students;
+        
+        // Только преподаватели, которые руководят научными темами или направлениями
+        public ObservableCollection<Teacher> Supervisors => new ObservableCollection<Teacher>(
+            _dataService.Teachers.Where(t => t.LeadsResearchTopics || t.LeadsResearchDirections)
+        );
+        
+        public ThesisWork? SelectedThesisWork
+        {
+            get => _selectedThesisWork;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedThesisWork, value);
+                if (value != null)
+                {
+                    Title = value.Title;
+                    SelectedStudent = _dataService.GetStudent(value.StudentId);
+                    SelectedSupervisor = _dataService.GetTeacher(value.SupervisorId);
+                    Year = value.Year;
+                    Grade = value.Grade;
+                }
+            }
+        }
+        
+        public string Title
+        {
+            get => _title;
+            set => this.RaiseAndSetIfChanged(ref _title, value);
+        }
+        
+        public Student? SelectedStudent
+        {
+            get => _selectedStudent;
+            set => this.RaiseAndSetIfChanged(ref _selectedStudent, value);
+        }
+        
+        public Teacher? SelectedSupervisor
+        {
+            get => _selectedSupervisor;
+            set => this.RaiseAndSetIfChanged(ref _selectedSupervisor, value);
+        }
+        
+        public int Year
+        {
+            get => _year;
+            set => this.RaiseAndSetIfChanged(ref _year, value);
+        }
+        
+        public int? Grade
+        {
+            get => _grade;
+            set => this.RaiseAndSetIfChanged(ref _grade, value);
+        }
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
+        }
+        
+        public ReactiveCommand<Unit, Unit> AddCommand { get; }
+        public ReactiveCommand<Unit, Unit> UpdateCommand { get; }
+        public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+        
+        private void AddThesisWork()
+        {
+            ErrorMessage = string.Empty;
+            // Валидация студента
+            if (SelectedStudent == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Студент", "not_selected");
+                return;
+            }
+            // Валидация научного руководителя
+            if (SelectedSupervisor == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Научный руководитель", "not_selected");
+                return;
+            }
+            // Проверка: преподаватель должен руководить научными темами или направлениями
+            if (!SelectedSupervisor.LeadsResearchTopics && !SelectedSupervisor.LeadsResearchDirections)
+            {
+                ErrorMessage = "Выбранный преподаватель не может быть научным руководителем. " +
+                               "Научный руководитель должен иметь отметку \"Руководит научными темами\" " +
+                               "или \"Руководит научными направлениями\".";
+                return;
+            }
+            // Валидация темы работы
+            if (string.IsNullOrWhiteSpace(Title))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Тема работы", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidNameWithNumbers(Title))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Тема работы", "invalid_name_with_numbers");
+                return;
+            }
+            // Валидация года защиты
+            if (!ValidationHelper.IsValidYear(Year.ToString()))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Год защиты", "invalid_year");
+                return;
+            }
+            // Валидация оценки (может быть пустой, но если не пустая - должна быть от 2 до 5)
+            if (Grade.HasValue && (Grade.Value < 2 || Grade.Value > 5))
+            {
+                ErrorMessage = "Оценка должна быть числом от 2 до 5.";
+                return;
+            }
+            
+            var thesisWork = new ThesisWork
+            {
+                Title = Title,
+                StudentId = SelectedStudent.Id,
+                SupervisorId = SelectedSupervisor.Id,
+                Year = Year,
+                Grade = Grade
+            };
+            
+            _dataService.ThesisWorks.Add(thesisWork);
+            
+            ClearFields();
+        }
+        
+        private void UpdateThesisWork()
+        {
+            ErrorMessage = string.Empty;
+            if (SelectedThesisWork == null)
+            {
+                ErrorMessage = "Выберите дипломную работу для обновления.";
+                return;
+            }
+            // Валидация студента
+            if (SelectedStudent == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Студент", "not_selected");
+                return;
+            }
+            // Валидация научного руководителя
+            if (SelectedSupervisor == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Научный руководитель", "not_selected");
+                return;
+            }
+            // Проверка: преподаватель должен руководить научными темами или направлениями
+            if (!SelectedSupervisor.LeadsResearchTopics && !SelectedSupervisor.LeadsResearchDirections)
+            {
+                ErrorMessage = "Выбранный преподаватель не может быть научным руководителем. " +
+                               "Научный руководитель должен иметь отметку \"Руководит научными темами\" " +
+                               "или \"Руководит научными направлениями\".";
+                return;
+            }
+            // Валидация темы работы
+            if (string.IsNullOrWhiteSpace(Title))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Тема работы", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidNameWithNumbers(Title))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Тема работы", "invalid_name_with_numbers");
+                return;
+            }
+            // Валидация года защиты
+            if (!ValidationHelper.IsValidYear(Year.ToString()))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Год защиты", "invalid_year");
+                return;
+            }
+            // Валидация оценки (может быть пустой, но если не пустая - должна быть от 2 до 5)
+            if (Grade.HasValue && (Grade.Value < 2 || Grade.Value > 5))
+            {
+                ErrorMessage = "Оценка должна быть числом от 2 до 5.";
+                return;
+            }
+            
+            SelectedThesisWork.Title = Title;
+            SelectedThesisWork.StudentId = SelectedStudent.Id;
+            SelectedThesisWork.SupervisorId = SelectedSupervisor.Id;
+            SelectedThesisWork.Year = Year;
+            SelectedThesisWork.Grade = Grade;
+            
+            var index = ThesisWorks.IndexOf(SelectedThesisWork);
+            if (index >= 0)
+            {
+                ThesisWorks[index] = SelectedThesisWork;
+            }
+        }
+        
+        private void DeleteThesisWork()
+        {
+            if (SelectedThesisWork == null) return;
+            
+            _dataService.ThesisWorks.Remove(SelectedThesisWork);
+            ThesisWorks.Remove(SelectedThesisWork);
+            
+            ClearFields();
+        }
+        
+        private void ClearFields()
+        {
+            Title = string.Empty;
+            SelectedStudent = null;
+            SelectedSupervisor = null;
+            Year = DateTime.Now.Year;
+            Grade = null;
+            SelectedThesisWork = null;
+            ErrorMessage = string.Empty;
+        }
+    }
+}
+using System;
+using System.Linq;
+using System.Reactive;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+namespace UniversityIS.ViewModels
+{
+    // ViewModel для окна ввода оценки студента
+    // Управляет вводом баллов за семестр и экзамен/зачет
+    // Автоматически рассчитывает итоговую оценку по правилам вуза
+    public class GradeInputViewModel : ViewModelBase
+    {
+        private readonly DataService _dataService;
+        private readonly Student _student;
+        private readonly Discipline _discipline;
+        private int _semesterPoints;
+        private int _examPoints;
+        private int _totalPoints;
+        private string _grade = string.Empty;
+        private string _errorMessage = string.Empty;
+        private int _maxSemesterPoints;
+        private int _maxExamPoints;
+        public GradeInputViewModel(DataService dataService, Student student, Discipline discipline)
+        {
+            _dataService = dataService;
+            _student = student;
+            _discipline = discipline;
+            // Определяем максимальные баллы в зависимости от формы контроля
+            if (discipline.ControlForm == ControlForm.Exam)
+            {
+                MaxSemesterPoints = 60;
+                MaxExamPoints = 40;
+                ControlFormName = "Экзамен";
+            }
+            else // Credit или DifferentiatedCredit
+            {
+                MaxSemesterPoints = 80;
+                MaxExamPoints = 20;
+                ControlFormName = discipline.ControlForm == ControlForm.Pass ? "Зачет" : "Дифференцированный зачет";
+            }
+            // Загружаем существующую оценку, если есть
+            LoadExistingGrade();
+            SaveCommand = ReactiveCommand.Create(SaveGrade, outputScheduler: RxApp.MainThreadScheduler);
+            CalculateCommand = ReactiveCommand.Create(Calculate, outputScheduler: RxApp.MainThreadScheduler);
+            
+            // Подписываемся на изменение баллов для автоматического расчета
+            this.WhenAnyValue(x => x.SemesterPoints, x => x.ExamPoints)
+                .Subscribe(_ => Calculate());
+        }
+        public string DisciplineName => _discipline.Name;
+        public string StudentName => $"{_student.LastName} {_student.FirstName} {_student.MiddleName}".Trim();
+        public string ControlFormName { get; }
+        public int MaxSemesterPoints
+        {
+            get => _maxSemesterPoints;
+            set => this.RaiseAndSetIfChanged(ref _maxSemesterPoints, value);
+        }
+        public int MaxExamPoints
+        {
+            get => _maxExamPoints;
+            set => this.RaiseAndSetIfChanged(ref _maxExamPoints, value);
+        }
+        public int SemesterPoints
+        {
+            get => _semesterPoints;
+            set => this.RaiseAndSetIfChanged(ref _semesterPoints, Math.Clamp(value, 0, MaxSemesterPoints));
+        }
+        public int ExamPoints
+        {
+            get => _examPoints;
+            set => this.RaiseAndSetIfChanged(ref _examPoints, Math.Clamp(value, 0, MaxExamPoints));
+        }
+        public int TotalPoints
+        {
+            get => _totalPoints;
+            set => this.RaiseAndSetIfChanged(ref _totalPoints, value);
+        }
+        public string Grade
+        {
+            get => _grade;
+            set => this.RaiseAndSetIfChanged(ref _grade, value);
+        }
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
+        }
+        public ReactiveCommand<Unit, Unit> SaveCommand { get; }
+        public ReactiveCommand<Unit, Unit> CalculateCommand { get; }
+        // Загружает существующую оценку студента по этой дисциплине, если она есть
+        // Заполняет поля ввода уже имеющимися баллами
+        private void LoadExistingGrade()
+        {
+            var existingGrade = _dataService.Grades.FirstOrDefault(g => 
+                g.StudentId == _student.Id && g.DisciplineId == _discipline.Id);
+            if (existingGrade != null)
+            {
+                SemesterPoints = existingGrade.SemesterPoints;
+                ExamPoints = existingGrade.ExamPoints;
+                Calculate();
+            }
+        }
+        // Рассчитывает итоговую оценку на основе введенных баллов
+        // Шкала оценивания зависит от формы контроля (экзамен/зачет/дифзачет)
+        private void Calculate()
+        {
+            TotalPoints = SemesterPoints + ExamPoints;
+            // Для экзамена и дифференцированного зачета используется 5-балльная шкала
+            if (_discipline.ControlForm == ControlForm.Exam || _discipline.ControlForm == ControlForm.DifferentiatedPass)
+            {
+                if (TotalPoints < 50)
+                    Grade = "Неудовлетворительно (2) - Долг";
+                else if (TotalPoints <= 72)
+                    Grade = "Удовлетворительно (3)";
+                else if (TotalPoints <= 86)
+                    Grade = "Хорошо (4)";
+                else
+                    Grade = "Отлично (5)";
+            }
+            else // Для обычного зачета - зачет/незачет
+            {
+                Grade = TotalPoints >= 50 ? "Зачет" : "Незачет";
+            }
+        }
+        // Сохраняет оценку в базу данных
+        // Если оценка уже существует - обновляет ее, иначе создает новую
+        private void SaveGrade()
+        {
+            ErrorMessage = string.Empty;
+            var existingGrade = _dataService.Grades.FirstOrDefault(g => 
+                g.StudentId == _student.Id && g.DisciplineId == _discipline.Id);
+            if (existingGrade != null)
+            {
+                // Обновляем существующую оценку
+                existingGrade.SemesterPoints = SemesterPoints;
+                existingGrade.ExamPoints = ExamPoints;
+                existingGrade.CalculateGrade(_discipline.ControlForm);
+            }
+            else
+            {
+                // Создаем новую оценку
+                var newGrade = new StudentGrade
+                {
+                    StudentId = _student.Id,
+                    DisciplineId = _discipline.Id,
+                    SemesterPoints = SemesterPoints,
+                    ExamPoints = ExamPoints
+                };
+ewGrade.CalculateGrade(_discipline.ControlForm);
+                _dataService.Grades.Add(newGrade);
+            }
+            _dataService.SaveAllData();
+        }
+    }
+}
+﻿using System.Reactive;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+
+namespace UniversityIS.ViewModels;
+
+// Главная ViewModel приложения
+// Управляет навигацией между разными разделами и координирует работу всех ViewModel
+public partial class MainWindowViewModel : ViewModelBase
+{
+    private readonly DataService _dataService;
+    
+    // Текущая открытая страница (раздел приложения)
+    private ViewModelBase _currentPage;
+    
+    // Инициализация главного окна: загрузка данных и создание всех ViewModel
+    public MainWindowViewModel()
+    {
+        _dataService = new DataService();
+        _dataService.LoadAllData();
+        
+        // Инициализация ViewModels для разделов
+        FacultiesViewModel = new FacultiesViewModel(_dataService);
+        DepartmentsViewModel = new DepartmentsViewModel(_dataService);
+        GroupsViewModel = new GroupsViewModel(_dataService);
+        StudentsViewModel = new StudentsViewModel(_dataService, ShowStudentProfile);
+        TeachersViewModel = new TeachersViewModel(_dataService, ShowTeacherProfile);
+        DisciplinesViewModel = new DisciplinesViewModel(_dataService);
+        WorkLoadsViewModel = new WorkLoadsViewModel(_dataService);
+        ThesisWorksViewModel = new ThesisWorksViewModel(_dataService);
+        
+        // По умолчанию открываем факультеты
+        _currentPage = FacultiesViewModel;
+        
+        // Команды навигации с указанием главного потока UI
+        ShowFacultiesCommand = ReactiveCommand.Create(() => { CurrentPage = FacultiesViewModel; }, outputScheduler: RxApp.MainThreadScheduler);
+        ShowDepartmentsCommand = ReactiveCommand.Create(() => { CurrentPage = DepartmentsViewModel; }, outputScheduler: RxApp.MainThreadScheduler);
+        ShowGroupsCommand = ReactiveCommand.Create(() => { CurrentPage = GroupsViewModel; }, outputScheduler: RxApp.MainThreadScheduler);
+        ShowStudentsCommand = ReactiveCommand.Create(() => { CurrentPage = StudentsViewModel; }, outputScheduler: RxApp.MainThreadScheduler);
+        ShowTeachersCommand = ReactiveCommand.Create(() => { CurrentPage = TeachersViewModel; }, outputScheduler: RxApp.MainThreadScheduler);
+        ShowDisciplinesCommand = ReactiveCommand.Create(() => { CurrentPage = DisciplinesViewModel; }, outputScheduler: RxApp.MainThreadScheduler);
+        ShowWorkLoadsCommand = ReactiveCommand.Create(() => { CurrentPage = WorkLoadsViewModel; }, outputScheduler: RxApp.MainThreadScheduler);
+        ShowThesisWorksCommand = ReactiveCommand.Create(() => { CurrentPage = ThesisWorksViewModel; }, outputScheduler: RxApp.MainThreadScheduler);
+        
+        SaveDataCommand = ReactiveCommand.Create(() => 
+        { 
+            _dataService.SaveAllData();
+        }, outputScheduler: RxApp.MainThreadScheduler);
+    }
+    
+    // Вызывается при закрытии приложения для сохранения всех данных
+    public void OnClosing()
+    {
+        _dataService.SaveAllData();
+    }
+
+    // Открывает профиль выбранного студента с информацией о его предметах и оценках
+    public void ShowStudentProfile(Student student)
+    {
+        var profileViewModel = new StudentProfileViewModel(_dataService, student);
+        CurrentPage = profileViewModel;
+    }
+
+    // Открывает профиль выбранного преподавателя с информацией о его дисциплинах
+    public void ShowTeacherProfile(Teacher teacher)
+    {
+        var profileViewModel = new TeacherProfileViewModel(_dataService, teacher);
+        CurrentPage = profileViewModel;
+    }
+    
+    // Текущая открытая страница в главном окне
+    // При изменении автоматически обновляется содержимое главного окна
+    public ViewModelBase CurrentPage
+    {
+        get => _currentPage;
+        set => this.RaiseAndSetIfChanged(ref _currentPage, value);
+    }
+    
+    // ViewModel для всех разделов приложения
+    public FacultiesViewModel FacultiesViewModel { get; }
+    public DepartmentsViewModel DepartmentsViewModel { get; }
+    public GroupsViewModel GroupsViewModel { get; }
+    public StudentsViewModel StudentsViewModel { get; }
+    public TeachersViewModel TeachersViewModel { get; }
+    public DisciplinesViewModel DisciplinesViewModel { get; }
+    public WorkLoadsViewModel WorkLoadsViewModel { get; }
+    public ThesisWorksViewModel ThesisWorksViewModel { get; }
+    
+    // Команды для навигации между разделами приложения
+    // Все команды выполняются в главном потоке UI для безопасности
+    public ReactiveCommand<Unit, Unit> ShowFacultiesCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowDepartmentsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowGroupsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowStudentsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowTeachersCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowDisciplinesCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowWorkLoadsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowThesisWorksCommand { get; }
+    public ReactiveCommand<Unit, Unit> SaveDataCommand { get; }
+}
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+using UniversityIS.Helpers;
+namespace UniversityIS.ViewModels
+{
+    // Группа студентов, объединенных по учебной группе
+    // Используется для отображения студентов с группировкой по группам
+    public class StudentGroupGrouping
+    {
+        public StudentGroupGrouping(Models.Group group, IEnumerable<Student> students)
+        {
+            Group = group;
+            Students = new ObservableCollection<Student>(students);
+        }
+        public Models.Group Group { get; }
+        public string GroupName => Group.Number;
+        public ObservableCollection<Student> Students { get; }
+    }
+    // Группа студентов, объединенных по факультету
+    // Содержит вложенные группы по учебным группам
+    public class StudentFacultyGrouping
+    {
+        public StudentFacultyGrouping(string facultyName, IEnumerable<StudentGroupGrouping> groups)
+        {
+            FacultyName = facultyName;
+            Groups = new ObservableCollection<StudentGroupGrouping>(groups);
+        }
+        public string FacultyName { get; }
+        public ObservableCollection<StudentGroupGrouping> Groups { get; }
+    }
+    // ViewModel для управления студентами
+    // Позволяет добавлять, редактировать и удалять студентов
+    // Группирует студентов по факультетам и группам для удобного отображения
+    public class StudentsViewModel : ViewModelBase
+    {
+        private readonly DataService _dataService;
+        private readonly Action<Student>? _showProfileAction;
+        private Student? _selectedStudent;
+        private string _lastName = string.Empty;
+        private string _firstName = string.Empty;
+        private string _middleName = string.Empty;
+        private string _recordBookNumber = string.Empty;
+        private double _gpa = 0.0;
+        private Group? _selectedGroup;
+        private string _errorMessage = string.Empty;
+        private ObservableCollection<StudentFacultyGrouping>? _groupedStudents;
+        
+        public StudentsViewModel(DataService dataService, Action<Student>? showProfileAction = null)
+        {
+            _dataService = dataService;
+            _showProfileAction = showProfileAction;
+            
+            // Подписываемся на изменения для обновления группировки
+            _dataService.Students.CollectionChanged += (s, e) => UpdateGroupedStudents();
+            _dataService.Groups.CollectionChanged += (s, e) => UpdateGroupedStudents();
+            _dataService.Faculties.CollectionChanged += (s, e) => UpdateGroupedStudents();
+            
+            UpdateGroupedStudents(); // Первоначальная группировка
+            
+            AddCommand = ReactiveCommand.Create(AddStudent, outputScheduler: RxApp.MainThreadScheduler);
+            UpdateCommand = ReactiveCommand.Create(UpdateStudent, outputScheduler: RxApp.MainThreadScheduler);
+            DeleteCommand = ReactiveCommand.Create(DeleteStudent, outputScheduler: RxApp.MainThreadScheduler);
+            ShowProfileCommand = ReactiveCommand.Create(ShowProfile, outputScheduler: RxApp.MainThreadScheduler);
+        }
+        
+        public ObservableCollection<Student> Students => _dataService.Students;
+        public ObservableCollection<Group> Groups => _dataService.Groups;
+        public ObservableCollection<StudentFacultyGrouping>? GroupedStudents
+        {
+            get => _groupedStudents;
+            set => this.RaiseAndSetIfChanged(ref _groupedStudents, value);
+        }
+        // Обновляет группировку студентов по факультетам и группам
+        // Вызывается автоматически при изменении данных студентов, групп или факультетов
+        private void UpdateGroupedStudents()
+        {
+            var grouped = _dataService.Students
+                .GroupBy(s => s.GroupId)
+                .Select(groupStudents =>
+                {
+                    var group = _dataService.GetGroup(groupStudents.Key);
+                    if (group == null) return null;
+                    var faculty = _dataService.GetFaculty(group.FacultyId);
+                    var facultyName = faculty?.Name ?? "Неизвестный факультет";
+                    return new
+                    {
+                        FacultyName = facultyName,
+                        Group = group,
+                        Students = groupStudents.OrderBy(s => s.LastName).ThenBy(s => s.FirstName)
+                    };
+                })
+                .Where(x => x != null)
+                .GroupBy(x => x!.FacultyName)
+                .Select(facultyGroup =>
+                {
+                    var groupGroups = facultyGroup
+                        .OrderBy(x => x!.Group.Number)
+                        .Select(x => new StudentGroupGrouping(x!.Group, x.Students))
+                        .ToList();
+                    return new StudentFacultyGrouping(facultyGroup.Key, groupGroups);
+                })
+                .OrderBy(fg => fg.FacultyName)
+                .ToList();
+            GroupedStudents = new ObservableCollection<StudentFacultyGrouping>(grouped);
+        }
+        
+        public Student? SelectedStudent
+        {
+            get => _selectedStudent;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedStudent, value);
+                if (value != null)
+                {
+                    LastName = value.LastName;
+                    FirstName = value.FirstName;
+                    MiddleName = value.MiddleName;
+                    RecordBookNumber = value.RecordBookNumber;
+                    GPA = value.GPA;
+                    SelectedGroup = _dataService.GetGroup(value.GroupId);
+                }
+            }
+        }
+        
+        public string LastName
+        {
+            get => _lastName;
+            set => this.RaiseAndSetIfChanged(ref _lastName, value);
+        }
+        
+        public string FirstName
+        {
+            get => _firstName;
+            set => this.RaiseAndSetIfChanged(ref _firstName, value);
+        }
+        
+        public string MiddleName
+        {
+            get => _middleName;
+            set => this.RaiseAndSetIfChanged(ref _middleName, value);
+        }
+        
+        public string RecordBookNumber
+        {
+            get => _recordBookNumber;
+            set => this.RaiseAndSetIfChanged(ref _recordBookNumber, value);
+        }
+        
+        public double GPA
+        {
+            get => _gpa;
+            set => this.RaiseAndSetIfChanged(ref _gpa, value);
+        }
+        
+        public Group? SelectedGroup
+        {
+            get => _selectedGroup;
+            set => this.RaiseAndSetIfChanged(ref _selectedGroup, value);
+        }
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
+        }
+        
+        public ReactiveCommand<Unit, Unit> AddCommand { get; }
+        public ReactiveCommand<Unit, Unit> UpdateCommand { get; }
+        public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+        public ReactiveCommand<Unit, Unit> ShowProfileCommand { get; }
+        
+        private void AddStudent()
+        {
+            ErrorMessage = string.Empty;
+            // Валидация группы
+            if (SelectedGroup == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Группа", "not_selected");
+                return;
+            }
+            // Валидация фамилии
+            if (string.IsNullOrWhiteSpace(LastName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Фамилия", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(LastName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Фамилия", "invalid_name");
+                return;
+            }
+            // Валидация имени
+            if (string.IsNullOrWhiteSpace(FirstName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Имя", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(FirstName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Имя", "invalid_name");
+                return;
+            }
+            // Валидация отчества (может быть пустым)
+            if (!string.IsNullOrWhiteSpace(MiddleName) && !ValidationHelper.IsValidName(MiddleName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Отчество", "invalid_name");
+                return;
+            }
+            
+            var student = new Student
+            {
+                LastName = LastName,
+                FirstName = FirstName,
+                MiddleName = MiddleName,
+                RecordBookNumber = RecordBookNumber,
+                GPA = GPA,
+                GroupId = SelectedGroup.Id
+            };
+            
+            _dataService.Students.Add(student);
+            
+            ClearFields();
+        }
+        
+        private void UpdateStudent()
+        {
+            ErrorMessage = string.Empty;
+            if (SelectedStudent == null)
+            {
+                ErrorMessage = "Выберите студента для обновления.";
+                return;
+            }
+            // Валидация группы
+            if (SelectedGroup == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Группа", "not_selected");
+                return;
+            }
+            // Валидация фамилии
+            if (string.IsNullOrWhiteSpace(LastName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Фамилия", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(LastName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Фамилия", "invalid_name");
+                return;
+            }
+            // Валидация имени
+            if (string.IsNullOrWhiteSpace(FirstName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Имя", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(FirstName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Имя", "invalid_name");
+                return;
+            }
+            // Валидация отчества (может быть пустым)
+            if (!string.IsNullOrWhiteSpace(MiddleName) && !ValidationHelper.IsValidName(MiddleName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Отчество", "invalid_name");
+                return;
+            }
+            
+            SelectedStudent.LastName = LastName;
+            SelectedStudent.FirstName = FirstName;
+            SelectedStudent.MiddleName = MiddleName;
+            SelectedStudent.RecordBookNumber = RecordBookNumber;
+            SelectedStudent.GPA = GPA;
+            SelectedStudent.GroupId = SelectedGroup.Id;
+            
+            var index = Students.IndexOf(SelectedStudent);
+            if (index >= 0)
+            {
+                Students[index] = SelectedStudent;
+            }
+        }
+        
+        private void DeleteStudent()
+        {
+            if (SelectedStudent == null) return;
+            
+            _dataService.Students.Remove(SelectedStudent);
+            Students.Remove(SelectedStudent);
+            
+            ClearFields();
+        }
+        
+        private void ClearFields()
+        {
+            LastName = string.Empty;
+            FirstName = string.Empty;
+            MiddleName = string.Empty;
+            RecordBookNumber = string.Empty;
+            GPA = 0.0;
+            SelectedGroup = null;
+            SelectedStudent = null;
+            ErrorMessage = string.Empty;
+        }
+        private void ShowProfile()
+        {
+            if (SelectedStudent == null)
+            {
+                ErrorMessage = "Выберите студента для просмотра профиля.";
+                return;
+            }
+            _showProfileAction?.Invoke(SelectedStudent);
+        }
+    }
+}
+using System;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+using UniversityIS.Helpers;
+namespace UniversityIS.ViewModels
+{
+    // ViewModel для управления преподавателями
+    // Позволяет добавлять, редактировать и удалять преподавателей
+    // Управляет информацией о должности, степени, звании и научной деятельности
+    public class TeachersViewModel : ViewModelBase
+    {
+        private readonly DataService _dataService;
+        private readonly Action<Teacher>? _showProfileAction;
+        private Teacher? _selectedTeacher;
+        private string _lastName = string.Empty;
+        private string _firstName = string.Empty;
+        private string _middleName = string.Empty;
+        private TeacherPosition _position = TeacherPosition.Assistant;
+        private AcademicDegree _degree = AcademicDegree.None;
+        private AcademicTitle _title = AcademicTitle.None;
+        private bool _isPostgraduate = false;
+        private bool _leadsResearchTopics = false;
+        private bool _leadsResearchDirections = false;
+        private Department? _selectedDepartment;
+        private EnumItem<TeacherPosition>? _selectedPositionItem;
+        private EnumItem<AcademicDegree>? _selectedDegreeItem;
+        private EnumItem<AcademicTitle>? _selectedTitleItem;
+        private string _errorMessage = string.Empty;
+        
+        public TeachersViewModel(DataService dataService, Action<Teacher>? showProfileAction = null)
+        {
+            _dataService = dataService;
+            _showProfileAction = showProfileAction;
+            
+            Positions = new ObservableCollection<EnumItem<TeacherPosition>>(EnumHelper.GetTeacherPositions());
+            Degrees = new ObservableCollection<EnumItem<AcademicDegree>>(EnumHelper.GetAcademicDegrees());
+            Titles = new ObservableCollection<EnumItem<AcademicTitle>>(EnumHelper.GetAcademicTitles());
+            
+            AddCommand = ReactiveCommand.Create(AddTeacher, outputScheduler: RxApp.MainThreadScheduler);
+            UpdateCommand = ReactiveCommand.Create(UpdateTeacher, outputScheduler: RxApp.MainThreadScheduler);
+            DeleteCommand = ReactiveCommand.Create(DeleteTeacher, outputScheduler: RxApp.MainThreadScheduler);
+            ShowProfileCommand = ReactiveCommand.Create(ShowProfile, outputScheduler: RxApp.MainThreadScheduler);
+        }
+        
+        public ObservableCollection<Teacher> Teachers => _dataService.Teachers;
+        public ObservableCollection<Department> Departments => _dataService.Departments;
+        public ObservableCollection<EnumItem<TeacherPosition>> Positions { get; }
+        public ObservableCollection<EnumItem<AcademicDegree>> Degrees { get; }
+        public ObservableCollection<EnumItem<AcademicTitle>> Titles { get; }
+        
+        public Teacher? SelectedTeacher
+        {
+            get => _selectedTeacher;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedTeacher, value);
+                if (value != null)
+                {
+                    LastName = value.LastName;
+                    FirstName = value.FirstName;
+                    MiddleName = value.MiddleName;
+                    Position = value.Position;
+                    Degree = value.Degree;
+                    Title = value.Title;
+                    SelectedPositionItem = Positions.FirstOrDefault(x => x.Value == value.Position);
+                    SelectedDegreeItem = Degrees.FirstOrDefault(x => x.Value == value.Degree);
+                    SelectedTitleItem = Titles.FirstOrDefault(x => x.Value == value.Title);
+                    IsPostgraduate = value.IsPostgraduate;
+                    LeadsResearchTopics = value.LeadsResearchTopics;
+                    LeadsResearchDirections = value.LeadsResearchDirections;
+                    SelectedDepartment = _dataService.GetDepartment(value.DepartmentId);
+                }
+            }
+        }
+        
+        public string LastName
+        {
+            get => _lastName;
+            set => this.RaiseAndSetIfChanged(ref _lastName, value);
+        }
+        
+        public string FirstName
+        {
+            get => _firstName;
+            set => this.RaiseAndSetIfChanged(ref _firstName, value);
+        }
+        
+        public string MiddleName
+        {
+            get => _middleName;
+            set => this.RaiseAndSetIfChanged(ref _middleName, value);
+        }
+        
+        public TeacherPosition Position
+        {
+            get => _position;
+            set => this.RaiseAndSetIfChanged(ref _position, value);
+        }
+        
+        public AcademicDegree Degree
+        {
+            get => _degree;
+            set => this.RaiseAndSetIfChanged(ref _degree, value);
+        }
+        
+        public AcademicTitle Title
+        {
+            get => _title;
+            set => this.RaiseAndSetIfChanged(ref _title, value);
+        }
+        
+        public EnumItem<TeacherPosition>? SelectedPositionItem
+        {
+            get => _selectedPositionItem;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedPositionItem, value);
+                if (value != null)
+                    Position = value.Value;
+            }
+        }
+        
+        public EnumItem<AcademicDegree>? SelectedDegreeItem
+        {
+            get => _selectedDegreeItem;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedDegreeItem, value);
+                if (value != null)
+                    Degree = value.Value;
+            }
+        }
+        
+        public EnumItem<AcademicTitle>? SelectedTitleItem
+        {
+            get => _selectedTitleItem;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedTitleItem, value);
+                if (value != null)
+                    Title = value.Value;
+            }
+        }
+        
+        public bool IsPostgraduate
+        {
+            get => _isPostgraduate;
+            set => this.RaiseAndSetIfChanged(ref _isPostgraduate, value);
+        }
+        
+        public bool LeadsResearchTopics
+        {
+            get => _leadsResearchTopics;
+            set => this.RaiseAndSetIfChanged(ref _leadsResearchTopics, value);
+        }
+        
+        public bool LeadsResearchDirections
+        {
+            get => _leadsResearchDirections;
+            set => this.RaiseAndSetIfChanged(ref _leadsResearchDirections, value);
+        }
+        
+        public Department? SelectedDepartment
+        {
+            get => _selectedDepartment;
+            set => this.RaiseAndSetIfChanged(ref _selectedDepartment, value);
+        }
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
+        }
+        
+        public ReactiveCommand<Unit, Unit> AddCommand { get; }
+        public ReactiveCommand<Unit, Unit> UpdateCommand { get; }
+        public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+        public ReactiveCommand<Unit, Unit> ShowProfileCommand { get; }
+        
+        private void AddTeacher()
+        {
+            ErrorMessage = string.Empty;
+            // Валидация кафедры
+            if (SelectedDepartment == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Кафедра", "not_selected");
+                return;
+            }
+            // Валидация фамилии
+            if (string.IsNullOrWhiteSpace(LastName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Фамилия", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(LastName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Фамилия", "invalid_name");
+                return;
+            }
+            // Валидация имени
+            if (string.IsNullOrWhiteSpace(FirstName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Имя", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(FirstName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Имя", "invalid_name");
+                return;
+            }
+            // Валидация отчества (может быть пустым)
+            if (!string.IsNullOrWhiteSpace(MiddleName) && !ValidationHelper.IsValidName(MiddleName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Отчество", "invalid_name");
+                return;
+            }
+            
+            var teacher = new Teacher
+            {
+                LastName = LastName,
+                FirstName = FirstName,
+                MiddleName = MiddleName,
+                Position = Position,
+                Degree = Degree,
+                Title = Title,
+                IsPostgraduate = IsPostgraduate,
+                LeadsResearchTopics = LeadsResearchTopics,
+                LeadsResearchDirections = LeadsResearchDirections,
+                DepartmentId = SelectedDepartment.Id
+            };
+            
+            _dataService.Teachers.Add(teacher);
+            
+            ClearFields();
+        }
+        
+        private void UpdateTeacher()
+        {
+            ErrorMessage = string.Empty;
+            if (SelectedTeacher == null)
+            {
+                ErrorMessage = "Выберите преподавателя для обновления.";
+                return;
+            }
+            // Валидация кафедры
+            if (SelectedDepartment == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Кафедра", "not_selected");
+                return;
+            }
+            // Валидация фамилии
+            if (string.IsNullOrWhiteSpace(LastName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Фамилия", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(LastName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Фамилия", "invalid_name");
+                return;
+            }
+            // Валидация имени
+            if (string.IsNullOrWhiteSpace(FirstName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Имя", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(FirstName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Имя", "invalid_name");
+                return;
+            }
+            // Валидация отчества (может быть пустым)
+            if (!string.IsNullOrWhiteSpace(MiddleName) && !ValidationHelper.IsValidName(MiddleName))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Отчество", "invalid_name");
+                return;
+            }
+            
+            SelectedTeacher.LastName = LastName;
+            SelectedTeacher.FirstName = FirstName;
+            SelectedTeacher.MiddleName = MiddleName;
+            SelectedTeacher.Position = Position;
+            SelectedTeacher.Degree = Degree;
+            SelectedTeacher.Title = Title;
+            SelectedTeacher.IsPostgraduate = IsPostgraduate;
+            SelectedTeacher.LeadsResearchTopics = LeadsResearchTopics;
+            SelectedTeacher.LeadsResearchDirections = LeadsResearchDirections;
+            SelectedTeacher.DepartmentId = SelectedDepartment.Id;
+            
+            var index = Teachers.IndexOf(SelectedTeacher);
+            if (index >= 0)
+            {
+                Teachers[index] = SelectedTeacher;
+            }
+        }
+        
+        private void DeleteTeacher()
+        {
+            if (SelectedTeacher == null) return;
+            
+            _dataService.Teachers.Remove(SelectedTeacher);
+            Teachers.Remove(SelectedTeacher);
+            
+            ClearFields();
+        }
+        
+        private void ClearFields()
+        {
+            LastName = string.Empty;
+            FirstName = string.Empty;
+            MiddleName = string.Empty;
+            Position = TeacherPosition.Assistant;
+            Degree = AcademicDegree.None;
+            Title = AcademicTitle.None;
+            IsPostgraduate = false;
+            LeadsResearchTopics = false;
+            LeadsResearchDirections = false;
+            SelectedDepartment = null;
+            SelectedTeacher = null;
+            ErrorMessage = string.Empty;
+        }
+        private void ShowProfile()
+        {
+            if (SelectedTeacher == null)
+            {
+                ErrorMessage = "Выберите преподавателя для просмотра профиля.";
+                return;
+            }
+            _showProfileAction?.Invoke(SelectedTeacher);
+        }
+    }
+}
+using System;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive;
+using System.Text.RegularExpressions;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+using UniversityIS.Helpers;
+namespace UniversityIS.ViewModels
+{
+    // ViewModel для управления учебной нагрузкой преподавателей
+    // Позволяет назначать преподавателям дисциплины для конкретных групп
+    // Валидирует правила: один преподаватель на лекции/семинары, несколько на лабораторные
+    public class WorkLoadsViewModel : ViewModelBase
+    {
+        private readonly DataService _dataService;
+        private WorkLoad? _selectedWorkLoad;
+        private Teacher? _selectedTeacher;
+        private Discipline? _selectedDiscipline;
+        private Models.Group? _selectedGroup;
+        private LessonType _lessonType = LessonType.Lecture;
+        private int _hours = 0;
+        private string _academicYear = $"{DateTime.Now.Year}/{DateTime.Now.Year + 1}";
+        private int _semester = 1;
+        private EnumItem<LessonType>? _selectedLessonTypeItem;
+        private string _errorMessage = string.Empty;
+        private ObservableCollection<Discipline> _availableDisciplines = new();
+        
+        public WorkLoadsViewModel(DataService dataService)
+        {
+            _dataService = dataService;
+            LessonTypes = new ObservableCollection<EnumItem<LessonType>>(EnumHelper.GetLessonTypes());
+            
+            AddCommand = ReactiveCommand.Create(AddWorkLoad, outputScheduler: RxApp.MainThreadScheduler);
+            UpdateCommand = ReactiveCommand.Create(UpdateWorkLoad, outputScheduler: RxApp.MainThreadScheduler);
+            DeleteCommand = ReactiveCommand.Create(DeleteWorkLoad, outputScheduler: RxApp.MainThreadScheduler);
+            // Подписываемся на изменения для обновления списка дисциплин
+            _dataService.TeacherDisciplines.CollectionChanged += (s, e) => UpdateAvailableDisciplines();
+            this.WhenAnyValue(x => x.SelectedTeacher).Subscribe(_ => UpdateAvailableDisciplines());
+            
+            UpdateAvailableDisciplines();
+        }
+        
+        public ObservableCollection<WorkLoad> WorkLoads => _dataService.WorkLoads;
+        public ObservableCollection<Teacher> Teachers => _dataService.Teachers;
+        public ObservableCollection<Discipline> AvailableDisciplines
+        {
+            get => _availableDisciplines;
+            set => this.RaiseAndSetIfChanged(ref _availableDisciplines, value);
+        }
+        public ObservableCollection<Models.Group> Groups => _dataService.Groups;
+        public ObservableCollection<EnumItem<LessonType>> LessonTypes { get; }
+        
+        public WorkLoad? SelectedWorkLoad
+        {
+            get => _selectedWorkLoad;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedWorkLoad, value);
+                if (value != null)
+                {
+                    SelectedTeacher = _dataService.GetTeacher(value.TeacherId);
+                    SelectedDiscipline = _dataService.GetDiscipline(value.DisciplineId);
+                    SelectedGroup = _dataService.GetGroup(value.GroupId);
+                    LessonType = value.LessonType;
+                    SelectedLessonTypeItem = LessonTypes.FirstOrDefault(x => x.Value == value.LessonType);
+                    Hours = value.Hours;
+                    AcademicYear = value.AcademicYear;
+                    Semester = value.Semester;
+                }
+            }
+        }
+        
+        public Teacher? SelectedTeacher
+        {
+            get => _selectedTeacher;
+            set => this.RaiseAndSetIfChanged(ref _selectedTeacher, value);
+        }
+        
+        public Discipline? SelectedDiscipline
+        {
+            get => _selectedDiscipline;
+            set => this.RaiseAndSetIfChanged(ref _selectedDiscipline, value);
+        }
+        
+        public Models.Group? SelectedGroup
+        {
+            get => _selectedGroup;
+            set => this.RaiseAndSetIfChanged(ref _selectedGroup, value);
+        }
+        
+        public LessonType LessonType
+        {
+            get => _lessonType;
+            set => this.RaiseAndSetIfChanged(ref _lessonType, value);
+        }
+        
+        public EnumItem<LessonType>? SelectedLessonTypeItem
+        {
+            get => _selectedLessonTypeItem;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedLessonTypeItem, value);
+                if (value != null)
+                    LessonType = value.Value;
+            }
+        }
+        
+        public int Hours
+        {
+            get => _hours;
+            set => this.RaiseAndSetIfChanged(ref _hours, value);
+        }
+        
+        public string AcademicYear
+        {
+            get => _academicYear;
+            set => this.RaiseAndSetIfChanged(ref _academicYear, value);
+        }
+        
+        public int Semester
+        {
+            get => _semester;
+            set => this.RaiseAndSetIfChanged(ref _semester, value);
+        }
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
+        }
+        
+        public ReactiveCommand<Unit, Unit> AddCommand { get; }
+        public ReactiveCommand<Unit, Unit> UpdateCommand { get; }
+        public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+        
+        private void AddWorkLoad()
+        {
+            ErrorMessage = string.Empty;
+            // Валидация преподавателя
+            if (SelectedTeacher == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Преподаватель", "not_selected");
+                return;
+            }
+            // Валидация дисциплины
+            if (SelectedDiscipline == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Дисциплина", "not_selected");
+                return;
+            }
+            // Валидация группы
+            if (SelectedGroup == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Группа", "not_selected");
+                return;
+            }
+            // Валидация часов
+            if (!ValidationHelper.IsValidHours(Hours.ToString()))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Часы", "invalid_hours");
+                return;
+            }
+            // Валидация учебного года (формат: 2023/2024)
+            if (!Regex.IsMatch(AcademicYear, @"^\d{4}/\d{4}$"))
+            {
+                ErrorMessage = "Поле \"Учебный год\" должно иметь формат ГГГГ/ГГГГ (например: 2023/2024).";
+                return;
+            }
+            // Валидация семестра
+            if (Semester < 1 || Semester > 12)
+            {
+                ErrorMessage = "Поле \"Семестр\" должно быть числом от 1 до 12.";
+                return;
+            }
+            // Проверка: дисциплина должна быть у выбранной группы
+            if (SelectedDiscipline.GroupId != SelectedGroup.Id)
+            {
+                ErrorMessage = "Выбранная дисциплина не относится к данной группе.";
+                return;
+            }
+            // Проверка правила: один преподаватель на лекции/семинары
+            if (LessonType == LessonType.Lecture || LessonType == LessonType.Seminar)
+            {
+                var existingWorkLoad = _dataService.WorkLoads.FirstOrDefault(wl =>
+                    wl.DisciplineId == SelectedDiscipline.Id &&
+                    wl.GroupId == SelectedGroup.Id &&
+                    wl.Semester == Semester &&
+                    (wl.LessonType == LessonType.Lecture || wl.LessonType == LessonType.Seminar) &&
+                    wl.TeacherId != SelectedTeacher.Id);
+                if (existingWorkLoad != null)
+                {
+                    var lessonTypeName = LessonType == LessonType.Lecture ? "лекции" : "семинары";
+                    ErrorMessage = $"У этой группы уже есть преподаватель на {lessonTypeName} по данной дисциплине.";
+                    return;
+                }
+            }
+            
+            var workLoad = new WorkLoad
+            {
+                TeacherId = SelectedTeacher.Id,
+                DisciplineId = SelectedDiscipline.Id,
+                GroupId = SelectedGroup.Id,
+                LessonType = LessonType,
+                Hours = Hours,
+                AcademicYear = AcademicYear,
+                Semester = Semester
+            };
+            
+            _dataService.WorkLoads.Add(workLoad);
+            
+            ClearFields();
+        }
+        
+        private void UpdateWorkLoad()
+        {
+            ErrorMessage = string.Empty;
+            if (SelectedWorkLoad == null)
+            {
+                ErrorMessage = "Выберите нагрузку для обновления.";
+                return;
+            }
+            // Валидация преподавателя
+            if (SelectedTeacher == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Преподаватель", "not_selected");
+                return;
+            }
+            // Валидация дисциплины
+            if (SelectedDiscipline == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Дисциплина", "not_selected");
+                return;
+            }
+            // Валидация группы
+            if (SelectedGroup == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Группа", "not_selected");
+                return;
+            }
+            // Валидация часов
+            if (!ValidationHelper.IsValidHours(Hours.ToString()))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Часы", "invalid_hours");
+                return;
+            }
+            // Валидация учебного года (формат: 2023/2024)
+            if (!Regex.IsMatch(AcademicYear, @"^\d{4}/\d{4}$"))
+            {
+                ErrorMessage = "Поле \"Учебный год\" должно иметь формат ГГГГ/ГГГГ (например: 2023/2024).";
+                return;
+            }
+            // Валидация семестра
+            if (Semester < 1 || Semester > 12)
+            {
+                ErrorMessage = "Поле \"Семестр\" должно быть числом от 1 до 12.";
+                return;
+            }
+            // Проверка: дисциплина должна быть у выбранной группы
+            if (SelectedDiscipline.GroupId != SelectedGroup.Id)
+            {
+                ErrorMessage = "Выбранная дисциплина не относится к данной группе.";
+                return;
+            }
+            // Проверка правила: один преподаватель на лекции/семинары
+            if (LessonType == LessonType.Lecture || LessonType == LessonType.Seminar)
+            {
+                var existingWorkLoad = _dataService.WorkLoads.FirstOrDefault(wl =>
+                    wl.Id != SelectedWorkLoad.Id && // Исключаем текущую запись
+                    wl.DisciplineId == SelectedDiscipline.Id &&
+                    wl.GroupId == SelectedGroup.Id &&
+                    wl.Semester == Semester &&
+                    (wl.LessonType == LessonType.Lecture || wl.LessonType == LessonType.Seminar) &&
+                    wl.TeacherId != SelectedTeacher.Id);
+                if (existingWorkLoad != null)
+                {
+                    var lessonTypeName = LessonType == LessonType.Lecture ? "лекции" : "семинары";
+                    ErrorMessage = $"У этой группы уже есть преподаватель на {lessonTypeName} по данной дисциплине.";
+                    return;
+                }
+            }
+            
+            SelectedWorkLoad.TeacherId = SelectedTeacher.Id;
+            SelectedWorkLoad.DisciplineId = SelectedDiscipline.Id;
+            SelectedWorkLoad.GroupId = SelectedGroup.Id;
+            SelectedWorkLoad.LessonType = LessonType;
+            SelectedWorkLoad.Hours = Hours;
+            SelectedWorkLoad.AcademicYear = AcademicYear;
+            SelectedWorkLoad.Semester = Semester;
+            
+            var index = WorkLoads.IndexOf(SelectedWorkLoad);
+            if (index >= 0)
+            {
+                WorkLoads[index] = SelectedWorkLoad;
+            }
+        }
+        // Обновляет список доступных дисциплин в зависимости от выбранного преподавателя
+        // Показывает только те дисциплины, которые преподаватель может вести
+        // Вызывается автоматически при изменении выбранного преподавателя
+        private void UpdateAvailableDisciplines()
+        {
+            if (SelectedTeacher == null)
+            {
+                AvailableDisciplines = new ObservableCollection<Discipline>();
+                return;
+            }
+            // Получаем идентификаторы дисциплин, которые ведет выбранный преподаватель
+            var teacherDisciplineIds = _dataService.TeacherDisciplines
+                .Where(td => td.TeacherId == SelectedTeacher.Id)
+                .Select(td => td.DisciplineId)
+                .ToHashSet();
+            // Фильтруем все дисциплины, оставляя только те, что есть у преподавателя
+            var disciplines = _dataService.Disciplines
+                .Where(d => teacherDisciplineIds.Contains(d.Id))
+                .OrderBy(d => d.Name)
+                .ToList();
+            AvailableDisciplines = new ObservableCollection<Discipline>(disciplines);
+        }
+        
+        // Удаляет выбранную учебную нагрузку из базы данных
+        private void DeleteWorkLoad()
+        {
+            if (SelectedWorkLoad == null) return;
+            
+            _dataService.WorkLoads.Remove(SelectedWorkLoad);
+            WorkLoads.Remove(SelectedWorkLoad);
+            
+            ClearFields();
+        }
+        
+        private void ClearFields()
+        {
+            SelectedTeacher = null;
+            SelectedDiscipline = null;
+            SelectedGroup = null;
+            LessonType = LessonType.Lecture;
+            Hours = 0;
+            AcademicYear = $"{DateTime.Now.Year}/{DateTime.Now.Year + 1}";
+            Semester = 1;
+            SelectedWorkLoad = null;
+            ErrorMessage = string.Empty;
+        }
+    }
+}
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+using UniversityIS.Helpers;
+namespace UniversityIS.ViewModels
+{
+    // Группа учебных групп, объединенных по курсу
+    // Используется для отображения групп с группировкой по курсам
+    public class CourseGrouping
+    {
+        public CourseGrouping(int course, IEnumerable<Group> groups)
+        {
+            Course = course;
+            Groups = new ObservableCollection<Group>(groups);
+        }
+        public int Course { get; }
+        public string CourseName => $"{Course} курс";
+        public ObservableCollection<Group> Groups { get; }
+    }
+    // Группа учебных групп, объединенных по факультету
+    // Содержит вложенные группы по курсам
+    public class FacultyGrouping
+    {
+        public FacultyGrouping(string facultyName, IEnumerable<CourseGrouping> courses)
+        {
+            FacultyName = facultyName;
+            Courses = new ObservableCollection<CourseGrouping>(courses);
+        }
+        public string FacultyName { get; }
+        public ObservableCollection<CourseGrouping> Courses { get; }
+    }
+    // ViewModel для управления учебными группами
+    // Позволяет добавлять, редактировать и удалять группы
+    // Группирует группы по факультетам и курсам для удобного отображения
+    public class GroupsViewModel : ViewModelBase
+    {
+        private readonly DataService _dataService;
+        private Group? _selectedGroup;
+        private string _number = string.Empty;
+        private int _yearOfAdmission = DateTime.Now.Year;
+        private int _course = 1;
+        private Faculty? _selectedFaculty;
+        private string _errorMessage = string.Empty;
+        private ObservableCollection<FacultyGrouping>? _groupedGroups;
+        
+        public GroupsViewModel(DataService dataService)
+        {
+            _dataService = dataService;
+            
+            // Подписываемся на изменения для обновления группировки
+            _dataService.Groups.CollectionChanged += (s, e) => UpdateGroupedGroups();
+            _dataService.Faculties.CollectionChanged += (s, e) => UpdateGroupedGroups();
+            
+            UpdateGroupedGroups(); // Первоначальная группировка
+            
+            AddCommand = ReactiveCommand.Create(AddGroup, outputScheduler: RxApp.MainThreadScheduler);
+            UpdateCommand = ReactiveCommand.Create(UpdateGroup, outputScheduler: RxApp.MainThreadScheduler);
+            DeleteCommand = ReactiveCommand.Create(DeleteGroup, outputScheduler: RxApp.MainThreadScheduler);
+        }
+        
+        public ObservableCollection<Group> Groups => _dataService.Groups;
+        public ObservableCollection<Faculty> Faculties => _dataService.Faculties;
+        public ObservableCollection<FacultyGrouping>? GroupedGroups
+        {
+            get => _groupedGroups;
+            set => this.RaiseAndSetIfChanged(ref _groupedGroups, value);
+        }
+        private void UpdateGroupedGroups()
+        {
+            var grouped = _dataService.Groups
+                .GroupBy(g => g.FacultyId)
+                .Select(facultyGroup =>
+                {
+                    var faculty = _dataService.GetFaculty(facultyGroup.Key);
+                    var facultyName = faculty?.Name ?? "Неизвестный факультет";
+                    var courseGroups = facultyGroup
+                        .GroupBy(g => g.Course)
+                        .OrderBy(cg => cg.Key)
+                        .Select(courseGroup => new CourseGrouping(courseGroup.Key, courseGroup.OrderBy(g => g.Number)))
+                        .ToList();
+                    return new FacultyGrouping(facultyName, courseGroups);
+                })
+                .OrderBy(fg => fg.FacultyName)
+                .ToList();
+            GroupedGroups = new ObservableCollection<FacultyGrouping>(grouped);
+        }
+        
+        public Group? SelectedGroup
+        {
+            get => _selectedGroup;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedGroup, value);
+                if (value != null)
+                {
+                    Number = value.Number;
+                    YearOfAdmission = value.YearOfAdmission;
+                    Course = value.Course;
+                    SelectedFaculty = _dataService.GetFaculty(value.FacultyId);
+                }
+            }
+        }
+        
+        public string Number
+        {
+            get => _number;
+            set => this.RaiseAndSetIfChanged(ref _number, value);
+        }
+        
+        public int YearOfAdmission
+        {
+            get => _yearOfAdmission;
+            set => this.RaiseAndSetIfChanged(ref _yearOfAdmission, value);
+        }
+        
+        public int Course
+        {
+            get => _course;
+            set => this.RaiseAndSetIfChanged(ref _course, value);
+        }
+        
+        public Faculty? SelectedFaculty
+        {
+            get => _selectedFaculty;
+            set => this.RaiseAndSetIfChanged(ref _selectedFaculty, value);
+        }
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
+        }
+        
+        public ReactiveCommand<Unit, Unit> AddCommand { get; }
+        public ReactiveCommand<Unit, Unit> UpdateCommand { get; }
+        public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+        
+        private void AddGroup()
+        {
+            ErrorMessage = string.Empty;
+            // Валидация факультета
+            if (SelectedFaculty == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Факультет", "not_selected");
+                return;
+            }
+            // Валидация номера группы
+            if (string.IsNullOrWhiteSpace(Number))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Номер группы", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidNameWithNumbers(Number))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Номер группы", "invalid_name_with_numbers");
+                return;
+            }
+            // Валидация года поступления
+            if (!ValidationHelper.IsValidYear(YearOfAdmission.ToString()))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Год поступления", "invalid_year");
+                return;
+            }
+            // Валидация курса
+            if (!ValidationHelper.IsValidCourse(Course.ToString()))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Курс", "invalid_course");
+                return;
+            }
+            
+            var group = new Group
+            {
+                Number = Number,
+                YearOfAdmission = YearOfAdmission,
+                Course = Course,
+                FacultyId = SelectedFaculty.Id
+            };
+            
+            _dataService.Groups.Add(group);
+            
+            ClearFields();
+        }
+        
+        private void UpdateGroup()
+        {
+            ErrorMessage = string.Empty;
+            if (SelectedGroup == null)
+            {
+                ErrorMessage = "Выберите группу для обновления.";
+                return;
+            }
+            // Валидация факультета
+            if (SelectedFaculty == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Факультет", "not_selected");
+                return;
+            }
+            // Валидация номера группы
+            if (string.IsNullOrWhiteSpace(Number))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Номер группы", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidNameWithNumbers(Number))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Номер группы", "invalid_name_with_numbers");
+                return;
+            }
+            // Валидация года поступления
+            if (!ValidationHelper.IsValidYear(YearOfAdmission.ToString()))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Год поступления", "invalid_year");
+                return;
+            }
+            // Валидация курса
+            if (!ValidationHelper.IsValidCourse(Course.ToString()))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Курс", "invalid_course");
+                return;
+            }
+            
+            SelectedGroup.Number = Number;
+            SelectedGroup.YearOfAdmission = YearOfAdmission;
+            SelectedGroup.Course = Course;
+            SelectedGroup.FacultyId = SelectedFaculty.Id;
+            
+            var index = Groups.IndexOf(SelectedGroup);
+            if (index >= 0)
+            {
+                Groups[index] = SelectedGroup;
+            }
+        }
+        
+        private void DeleteGroup()
+        {
+            if (SelectedGroup == null) return;
+            
+            _dataService.Groups.Remove(SelectedGroup);
+            Groups.Remove(SelectedGroup);
+            
+            ClearFields();
+        }
+        
+        private void ClearFields()
+        {
+            Number = string.Empty;
+            YearOfAdmission = DateTime.Now.Year;
+            Course = 1;
+            SelectedFaculty = null;
+            SelectedGroup = null;
+            ErrorMessage = string.Empty;
+        }
+    }
+}
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive;
+using ReactiveUI;
+using UniversityIS.Models;
+using UniversityIS.Services;
+using UniversityIS.Helpers;
+namespace UniversityIS.ViewModels
+{
+    // Группа кафедр, объединенных по факультету
+    // Используется для отображения кафедр с группировкой по факультетам
+    public class FacultyGroup
+    {
+        public string FacultyName { get; set; } = string.Empty;
+        public ObservableCollection<Department> Departments { get; set; } = new();
+    }
+    // ViewModel для управления кафедрами
+    // Позволяет добавлять, редактировать и удалять кафедры
+    // Группирует кафедры по факультетам для удобного отображения
+    public class DepartmentsViewModel : ViewModelBase
+    {
+        private readonly DataService _dataService;
+        private Department? _selectedDepartment;
+        private string _name = string.Empty;
+        private string _head = string.Empty;
+        private Faculty? _selectedFaculty;
+        private string _errorMessage = string.Empty;
+        private ObservableCollection<FacultyGroup> _groupedDepartments = new();
+        
+        public DepartmentsViewModel(DataService dataService)
+        {
+            _dataService = dataService;
+            
+            AddCommand = ReactiveCommand.Create(AddDepartment, outputScheduler: RxApp.MainThreadScheduler);
+            UpdateCommand = ReactiveCommand.Create(UpdateDepartment, outputScheduler: RxApp.MainThreadScheduler);
+            DeleteCommand = ReactiveCommand.Create(DeleteDepartment, outputScheduler: RxApp.MainThreadScheduler);
+            
+            // Подписываемся на изменения в коллекциях для обновления группировки
+            _dataService.Departments.CollectionChanged += (s, e) => UpdateGroupedDepartments();
+            _dataService.Faculties.CollectionChanged += (s, e) => UpdateGroupedDepartments();
+            
+            UpdateGroupedDepartments();
+        }
+        
+        public ObservableCollection<Department> Departments => _dataService.Departments;
+        public ObservableCollection<Faculty> Faculties => _dataService.Faculties;
+        public ObservableCollection<FacultyGroup> GroupedDepartments
+        {
+            get => _groupedDepartments;
+            set => this.RaiseAndSetIfChanged(ref _groupedDepartments, value);
+        }
+        
+        public Department? SelectedDepartment
+        {
+            get => _selectedDepartment;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedDepartment, value);
+                if (value != null)
+                {
+                    Name = value.Name;
+                    Head = value.Head;
+                    SelectedFaculty = _dataService.GetFaculty(value.FacultyId);
+                }
+            }
+        }
+        
+        public string Name
+        {
+            get => _name;
+            set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+        
+        public string Head
+        {
+            get => _head;
+            set => this.RaiseAndSetIfChanged(ref _head, value);
+        }
+        
+        public Faculty? SelectedFaculty
+        {
+            get => _selectedFaculty;
+            set => this.RaiseAndSetIfChanged(ref _selectedFaculty, value);
+        }
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
+        }
+        
+        public ReactiveCommand<Unit, Unit> AddCommand { get; }
+        public ReactiveCommand<Unit, Unit> UpdateCommand { get; }
+        public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+        
+        private void AddDepartment()
+        {
+            ErrorMessage = string.Empty;
+            // Валидация факультета
+            if (SelectedFaculty == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Факультет", "not_selected");
+                return;
+            }
+            // Валидация названия кафедры
+            if (string.IsNullOrWhiteSpace(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название кафедры", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название кафедры", "invalid_name");
+                return;
+            }
+            // Валидация ФИО заведующего
+            if (string.IsNullOrWhiteSpace(Head))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("ФИО заведующего", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(Head))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("ФИО заведующего", "invalid_name");
+                return;
+            }
+            
+            var department = new Department
+            {
+                Name = Name,
+                Head = Head,
+                FacultyId = SelectedFaculty.Id
+            };
+            
+            _dataService.Departments.Add(department);
+            
+            ClearFields();
+        }
+        
+        private void UpdateDepartment()
+        {
+            ErrorMessage = string.Empty;
+            if (SelectedDepartment == null)
+            {
+                ErrorMessage = "Выберите кафедру для обновления.";
+                return;
+            }
+            // Валидация факультета
+            if (SelectedFaculty == null)
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Факультет", "not_selected");
+                return;
+            }
+            // Валидация названия кафедры
+            if (string.IsNullOrWhiteSpace(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название кафедры", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(Name))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("Название кафедры", "invalid_name");
+                return;
+            }
+            // Валидация ФИО заведующего
+            if (string.IsNullOrWhiteSpace(Head))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("ФИО заведующего", "empty");
+                return;
+            }
+            if (!ValidationHelper.IsValidName(Head))
+            {
+                ErrorMessage = ValidationHelper.GetErrorMessage("ФИО заведующего", "invalid_name");
+                return;
+            }
+            
+            SelectedDepartment.Name = Name;
+            SelectedDepartment.Head = Head;
+            SelectedDepartment.FacultyId = SelectedFaculty.Id;
+            
+            var index = Departments.IndexOf(SelectedDepartment);
+            if (index >= 0)
+            {
+                Departments[index] = SelectedDepartment;
+            }
+        }
+        
+        private void DeleteDepartment()
+        {
+            if (SelectedDepartment == null) return;
+            
+            _dataService.Departments.Remove(SelectedDepartment);
+            Departments.Remove(SelectedDepartment);
+            
+            ClearFields();
+        }
+        
+        private void ClearFields()
+        {
+            Name = string.Empty;
+            Head = string.Empty;
+            SelectedFaculty = null;
+            SelectedDepartment = null;
+            ErrorMessage = string.Empty;
+        }
+        private void UpdateGroupedDepartments()
+        {
+            var groups = new ObservableCollection<FacultyGroup>();
+            
+            // Группируем кафедры по факультетам
+            var departmentsByFaculty = _dataService.Departments
+                .GroupBy(d => d.FacultyId)
+                .OrderBy(g => _dataService.GetFaculty(g.Key)?.Name ?? "Неизвестный факультет");
+            
+            foreach (var group in departmentsByFaculty)
+            {
+                var faculty = _dataService.GetFaculty(group.Key);
+                var facultyGroup = new FacultyGroup
+                {
+                    FacultyName = faculty?.Name ?? "Неизвестный факультет",
+                    Departments = new ObservableCollection<Department>(group.OrderBy(d => d.Name))
+                };
+                groups.Add(facultyGroup);
+            }
+            
+            GroupedDepartments = groups;
+        }
+    }
+}
+using System;
+using System.Diagnostics.CodeAnalysis;
+using Avalonia.Controls;
+using Avalonia.Controls.Templates;
+using UniversityIS.ViewModels;
+
+namespace UniversityIS;
+
+
+// Given a view model, returns the corresponding view if possible.
+
+[RequiresUnreferencedCode(
+    "Default implementation of ViewLocator involves reflection which may be trimmed away.",
+    Url = "https://docs.avaloniaui.net/docs/concepts/view-locator")]
+public class ViewLocator : IDataTemplate
+{
+    public Control? Build(object? param)
+    {
+        if (param is null)
+            return null;
+        
+        var name = param.GetType().FullName!.Replace("ViewModel", "View", StringComparison.Ordinal);
+        var type = Type.GetType(name);
+
+        if (type != null)
+        {
+            return (Control)Activator.CreateInstance(type)!;
+        }
+        
+        return new TextBlock { Text = "Not Found: " + name };
+    }
+
+    public bool Match(object? data)
+    {
+        return data is ViewModelBase;
+    }
+}
+namespace UniversityIS.Models
+{
+    
+    // Учёное звание
+    
+    public enum AcademicTitle
+    {
+        
+        // Без звания
+        
+        None,
+        
+        // Доцент
+        
+        AssociateProfessor,
+        
+        // Профессор
+        
+        Professor
+    }
+}
+namespace UniversityIS.Models
+{
+    // Методы расширения для enum'ов
+    public static class EnumExtensions
+    {
+        
+        // Получить русское название для TeacherPosition
+        
+        public static string ToRussianString(this TeacherPosition position)
+        {
+            return position switch
+            {
+                TeacherPosition.Assistant => "Ассистент",
+                TeacherPosition.Lecturer => "Преподаватель",
+                TeacherPosition.SeniorLecturer => "Старший преподаватель",
+                TeacherPosition.AssociateProfessor => "Доцент",
+                TeacherPosition.Professor => "Профессор",
+                _ => position.ToString()
+            };
+        }
+        
+        // Получить русское название для AcademicDegree
+        
+        public static string ToRussianString(this AcademicDegree degree)
+        {
+            return degree switch
+            {
+                AcademicDegree.None => "Без степени",
+                AcademicDegree.CandidateOfSciences => "Кандидат наук",
+                AcademicDegree.DoctorOfSciences => "Доктор наук",
+                _ => degree.ToString()
+            };
+        }
+        
+        // Получить русское название для AcademicTitle
+        
+        public static string ToRussianString(this AcademicTitle title)
+        {
+            return title switch
+            {
+                AcademicTitle.None => "Без звания",
+                AcademicTitle.AssociateProfessor => "Доцент",
+                AcademicTitle.Professor => "Профессор",
+                _ => title.ToString()
+            };
+        }
+        
+        // Получить русское название для LessonType
+        
+        public static string ToRussianString(this LessonType lessonType)
+        {
+            return lessonType switch
+            {
+                LessonType.Lecture => "Лекции",
+                LessonType.Seminar => "Семинары",
+                LessonType.Laboratory => "Лабораторные работы",
+                LessonType.Consultation => "Консультации",
+                LessonType.CourseWork => "Курсовые работы",
+                LessonType.CourseProject => "Курсовые проекты",
+                _ => lessonType.ToString()
+            };
+        }
+        
+        // Получить русское название для ControlForm
+        
+        public static string ToRussianString(this ControlForm controlForm)
+        {
+            return controlForm switch
+            {
+                ControlForm.Pass => "Зачёт",
+                ControlForm.DifferentiatedPass => "Дифференцированный зачёт",
+                ControlForm.Exam => "Экзамен",
+                _ => controlForm.ToString()
+            };
+        }
+    }
+}
+using System;
+using ReactiveUI;
+namespace UniversityIS.Models
+{
+    // Модель учебной нагрузки преподавателя
+    // Описывает, какой преподаватель ведет какой предмет у какой группы
+    // Содержит информацию о типе занятий (лекции, семинары, лабораторные) и количестве часов
+    public class WorkLoad : ReactiveObject
+    {
+        private Guid _id;
+        private Guid _teacherId;
+        private Guid _disciplineId;
+        private Guid _groupId;
+        private LessonType _lessonType;
+        private int _hours;
+        private string _academicYear = string.Empty;
+        private int _semester;
+        
+        // Уникальный идентификатор
+        
+        public Guid Id 
+        { 
+            get => _id;
+            set => this.RaiseAndSetIfChanged(ref _id, value);
+        }
+        
+        // Идентификатор преподавателя
+        
+        public Guid TeacherId 
+        { 
+            get => _teacherId;
+            set => this.RaiseAndSetIfChanged(ref _teacherId, value);
+        }
+        
+        // Идентификатор дисциплины
+        
+        public Guid DisciplineId 
+        { 
+            get => _disciplineId;
+            set => this.RaiseAndSetIfChanged(ref _disciplineId, value);
+        }
+        
+        // Идентификатор группы
+        
+        public Guid GroupId 
+        { 
+            get => _groupId;
+            set => this.RaiseAndSetIfChanged(ref _groupId, value);
+        }
+        
+        // Вид занятий
+        
+        public LessonType LessonType 
+        { 
+            get => _lessonType;
+            set => this.RaiseAndSetIfChanged(ref _lessonType, value);
+        }
+        
+        // Количество часов
+        
+        public int Hours 
+        { 
+            get => _hours;
+            set => this.RaiseAndSetIfChanged(ref _hours, value);
+        }
+        
+        // Учебный год
+        
+        public string AcademicYear 
+        { 
+            get => _academicYear;
+            set => this.RaiseAndSetIfChanged(ref _academicYear, value);
+        }
+        
+        // Семестр
+        
+        public int Semester 
+        { 
+            get => _semester;
+            set => this.RaiseAndSetIfChanged(ref _semester, value);
+        }
+        
+        public WorkLoad()
+        {
+            Id = Guid.NewGuid();
+            TeacherId = Guid.Empty;
+            DisciplineId = Guid.Empty;
+            GroupId = Guid.Empty;
+            LessonType = LessonType.Lecture;
+            Hours = 0;
+            AcademicYear = $"{DateTime.Now.Year}/{DateTime.Now.Year + 1}";
+            Semester = 1;
+        }
+        
+        // Сохранение в строку для текстового файла
+        
+        public string ToFileString()
+        {
+            return $"{Id}|{TeacherId}|{DisciplineId}|{GroupId}|{(int)LessonType}|{Hours}|{AcademicYear}|{Semester}";
+        }
+        
+        // Загрузка из строки текстового файла
+        
+        public static WorkLoad FromFileString(string line)
+        {
+            var parts = line.Split('|');
+            return new WorkLoad
+            {
+                Id = Guid.Parse(parts[0]),
+                TeacherId = Guid.Parse(parts[1]),
+                DisciplineId = Guid.Parse(parts[2]),
+                GroupId = Guid.Parse(parts[3]),
+                LessonType = (LessonType)int.Parse(parts[4]),
+                Hours = int.Parse(parts[5]),
+                AcademicYear = parts[6],
+                Semester = int.Parse(parts[7])
+            };
+        }
+        
+        public static string GetLessonTypeString(LessonType lessonType)
+        {
+            return lessonType switch
+            {
+                LessonType.Lecture => "Лекции",
+                LessonType.Seminar => "Семинары",
+                LessonType.Laboratory => "Лабораторные",
+                LessonType.Consultation => "Консультации",
+                LessonType.CourseWork => "Курсовая работа",
+                LessonType.CourseProject => "Курсовой проект",
+                _ => ""
+            };
+        }
+    }
+}
+namespace UniversityIS.Models
+{
+    
+    // Вид занятий
+    
+    public enum LessonType
+    {
+        
+        // Лекции
+        
+        Lecture,
+        
+        // Семинары
+        
+        Seminar,
+        
+        // Лабораторные работы
+        
+        Laboratory,
+        
+        // Консультации
+        
+        Consultation,
+        
+        // Курсовые работы
+        
+        CourseWork,
+        
+        // Курсовые проекты
+        
+        CourseProject
+    }
+}
+using System;
+using ReactiveUI;
+namespace UniversityIS.Models
+{
+    // Модель оценки студента по дисциплине
+    // Хранит баллы за семестр и экзамен/зачет, автоматически рассчитывает итоговую оценку
+    // Система оценивания: экзамен (60+40), зачет (80+20), дифзачет (80+20)
+    public class StudentGrade : ReactiveObject
+    {
+        private Guid _id;
+        private Guid _studentId;
+        private Guid _disciplineId;
+        private int _semesterPoints;
+        private int _examPoints;
+        private int _totalPoints;
+        private string _grade = string.Empty;
+        public StudentGrade()
+        {
+            Id = Guid.NewGuid();
+        }
+        public Guid Id
+        {
+            get => _id;
+            set => this.RaiseAndSetIfChanged(ref _id, value);
+        }
+        public Guid StudentId
+        {
+            get => _studentId;
+            set => this.RaiseAndSetIfChanged(ref _studentId, value);
+        }
+        public Guid DisciplineId
+        {
+            get => _disciplineId;
+            set => this.RaiseAndSetIfChanged(ref _disciplineId, value);
+        }
+        // Баллы за работу в семестре
+        // Максимум: 60 для экзамена, 80 для зачета/дифзачета
+        public int SemesterPoints
+        {
+            get => _semesterPoints;
+            set => this.RaiseAndSetIfChanged(ref _semesterPoints, value);
+        }
+        // Баллы на экзамене или зачете
+        // Максимум: 40 для экзамена, 20 для зачета/дифзачета
+        public int ExamPoints
+        {
+            get => _examPoints;
+            set => this.RaiseAndSetIfChanged(ref _examPoints, value);
+        }
+        // Общая сумма баллов (семестр + экзамен/зачет)
+        // Используется для определения итоговой оценки
+        public int TotalPoints
+        {
+            get => _totalPoints;
+            set => this.RaiseAndSetIfChanged(ref _totalPoints, value);
+        }
+        // Итоговая оценка в текстовом виде
+        // Для экзамена/дифзачета: "Отлично (5)", "Хорошо (4)", "Удовлетворительно (3)", "Неудовлетворительно (2)"
+        // Для зачета: "Зачет" или "Незачет"
+        public string Grade
+        {
+            get => _grade;
+            set => this.RaiseAndSetIfChanged(ref _grade, value);
+        }
+        // Рассчитывает итоговую оценку на основе набранных баллов и формы контроля
+        // Шкала оценивания:
+        // - Экзамен/Дифзачет: 0-49 (2), 50-72 (3), 73-86 (4), 87-100 (5)
+        // - Зачет: 0-49 (незачет), 50-100 (зачет)
+        public void CalculateGrade(ControlForm controlForm)
+        {
+            TotalPoints = SemesterPoints + ExamPoints;
+            if (controlForm == ControlForm.Exam || controlForm == ControlForm.DifferentiatedPass)
+            {
+                // Для экзамена и дифференцированного зачета
+                if (TotalPoints < 50)
+                    Grade = "Неудовлетворительно (2)";
+                else if (TotalPoints <= 72)
+                    Grade = "Удовлетворительно (3)";
+                else if (TotalPoints <= 86)
+                    Grade = "Хорошо (4)";
+                else
+                    Grade = "Отлично (5)";
+            }
+            else // Credit (зачет)
+            {
+                Grade = TotalPoints >= 50 ? "Зачет" : "Незачет";
+            }
+        }
+        public string ToFileString()
+        {
+            return $"{Id}|{StudentId}|{DisciplineId}|{SemesterPoints}|{ExamPoints}|{TotalPoints}|{Grade}";
+        }
+        public static StudentGrade FromFileString(string line)
+        {
+            var parts = line.Split('|');
+            return new StudentGrade
+            {
+                Id = Guid.Parse(parts[0]),
+                StudentId = Guid.Parse(parts[1]),
+                DisciplineId = Guid.Parse(parts[2]),
+                SemesterPoints = int.Parse(parts[3]),
+                ExamPoints = int.Parse(parts[4]),
+                TotalPoints = int.Parse(parts[5]),
+                Grade = parts[6]
+            };
+        }
+        public override string ToString()
+        {
+            return $"{TotalPoints} баллов - {Grade}";
+        }
+    }
+}
+namespace UniversityIS.Models
+{
+    // Форма контроля
+    public enum ControlForm
+    {
+        // Зачёт
+        Pass,
+        
+        // Дифференцированный зачёт
+        DifferentiatedPass,
+        
+        // Экзамен
+        Exam
+    }
+}
+using System;
+using System.Collections.Generic;
+using System.Linq;
+namespace UniversityIS.Models
+{
+    // Обертка для enum значений с русским названием
+    // Используется для отображения enum в ComboBox с локализованными названиями
+    public class EnumItem<T> where T : Enum
+    {
+        public T Value { get; set; }
+        public string Display { get; set; }
+        
+        public EnumItem(T value, string display)
+        {
+            Value = value;
+            Display = display;
+        }
+        
+        public override string ToString() => Display;
+    }
+    
+    // Вспомогательный класс для создания списков enum значений с русскими названиями
+    // Используется во всех ViewModel для заполнения ComboBox
+    public static class EnumHelper
+    {
+        public static List<EnumItem<TeacherPosition>> GetTeacherPositions()
+        {
+            return Enum.GetValues<TeacherPosition>()
+                .Select(p => new EnumItem<TeacherPosition>(p, p.ToRussianString()))
+                .ToList();
+        }
+        
+        public static List<EnumItem<AcademicDegree>> GetAcademicDegrees()
+        {
+            return Enum.GetValues<AcademicDegree>()
+                .Select(d => new EnumItem<AcademicDegree>(d, d.ToRussianString()))
+                .ToList();
+        }
+        
+        public static List<EnumItem<AcademicTitle>> GetAcademicTitles()
+        {
+            return Enum.GetValues<AcademicTitle>()
+                .Select(t => new EnumItem<AcademicTitle>(t, t.ToRussianString()))
+                .ToList();
+        }
+        
+        public static List<EnumItem<LessonType>> GetLessonTypes()
+        {
+            return Enum.GetValues<LessonType>()
+                .Select(l => new EnumItem<LessonType>(l, l.ToRussianString()))
+                .ToList();
+        }
+        
+        public static List<EnumItem<ControlForm>> GetControlForms()
+        {
+            return Enum.GetValues<ControlForm>()
+                .Select(c => new EnumItem<ControlForm>(c, c.ToRussianString()))
+                .ToList();
+        }
+    }
+}
+namespace UniversityIS.Models
+{
+    
+    // Учёная степень
+    
+    public enum AcademicDegree
+    {
+        
+        // Без степени
+        
+        None,
+        
+        // Кандидат наук
+        
+        CandidateOfSciences,
+        
+        // Доктор наук
+        
+        DoctorOfSciences
+    }
+}
+using System;
+using ReactiveUI;
+namespace UniversityIS.Models
+{
+    // Преподаватель
+    public class Teacher : ReactiveObject
+    {
+        private Guid _id;
+        private string _lastName = string.Empty;
+        private string _firstName = string.Empty;
+        private string _middleName = string.Empty;
+        private TeacherPosition _position;
+        private AcademicDegree _degree;
+        private AcademicTitle _title;
+        private Guid _departmentId;
+        private bool _isPostgraduate;
+        private bool _leadsResearchTopics;
+        private bool _leadsResearchDirections;
+        
+        // Уникальный идентификатор
+        public Guid Id 
+        { 
+            get => _id;
+            set => this.RaiseAndSetIfChanged(ref _id, value);
+        }
+        
+        // Фамилия
+        public string LastName 
+        { 
+            get => _lastName;
+            set => this.RaiseAndSetIfChanged(ref _lastName, value);
+        }
+        
+        // Имя
+        public string FirstName 
+        { 
+            get => _firstName;
+            set => this.RaiseAndSetIfChanged(ref _firstName, value);
+        }
+        
+        // Отчество
+        public string MiddleName 
+        { 
+            get => _middleName;
+            set => this.RaiseAndSetIfChanged(ref _middleName, value);
+        }
+        
+        // Должность
+        public TeacherPosition Position 
+        { 
+            get => _position;
+            set => this.RaiseAndSetIfChanged(ref _position, value);
+        }
+        
+        // Учёная степень
+        public AcademicDegree Degree 
+        { 
+            get => _degree;
+            set => this.RaiseAndSetIfChanged(ref _degree, value);
+        }
+        
+        // Учёное звание
+        public AcademicTitle Title 
+        { 
+            get => _title;
+            set => this.RaiseAndSetIfChanged(ref _title, value);
+        }
+        
+        // Идентификатор кафедры
+        public Guid DepartmentId 
+        { 
+            get => _departmentId;
+            set => this.RaiseAndSetIfChanged(ref _departmentId, value);
+        }
+        
+        // Обучается в аспирантуре
+        public bool IsPostgraduate 
+        { 
+            get => _isPostgraduate;
+            set => this.RaiseAndSetIfChanged(ref _isPostgraduate, value);
+        }
+        
+        // Руководит научными темами
+        public bool LeadsResearchTopics 
+        { 
+            get => _leadsResearchTopics;
+            set => this.RaiseAndSetIfChanged(ref _leadsResearchTopics, value);
+        }
+        
+        // Руководит научными направлениями
+        public bool LeadsResearchDirections 
+        { 
+            get => _leadsResearchDirections;
+            set => this.RaiseAndSetIfChanged(ref _leadsResearchDirections, value);
+        }
+        
+        public Teacher()
+        {
+            Id = Guid.NewGuid();
+            LastName = string.Empty;
+            FirstName = string.Empty;
+            MiddleName = string.Empty;
+            Position = TeacherPosition.Assistant;
+            Degree = AcademicDegree.None;
+            Title = AcademicTitle.None;
+            DepartmentId = Guid.Empty;
+            IsPostgraduate = false;
+            LeadsResearchTopics = false;
+            LeadsResearchDirections = false;
+        }
+        
+        // Полное имя преподавателя
+        public string FullName => $"{LastName} {FirstName} {MiddleName}";
+        
+        // Полная информация о преподавателе с должностью и званиями
+        public string FullInfo
+        {
+            get
+            {
+                var info = FullName;
+                if (Degree != AcademicDegree.None)
+                    info += $", {GetDegreeString(Degree)}";
+                if (Title != AcademicTitle.None)
+                    info += $", {GetTitleString(Title)}";
+                info += $", {GetPositionString(Position)}";
+                return info;
+            }
+        }
+        
+        public override string ToString()
+        {
+            return FullInfo;
+        }
+        
+        // Проверка возможности занимать текущую должность с текущим званием
+        public bool IsPositionValid()
+        {
+            // Доцент может быть только со званием доцента или выше
+            if (Position == TeacherPosition.AssociateProfessor && 
+                Title != AcademicTitle.AssociateProfessor && Title != AcademicTitle.Professor)
+                return false;
+            
+            // Профессор может быть только со званием профессора
+            if (Position == TeacherPosition.Professor && Title != AcademicTitle.Professor)
+                return false;
+            
+            return true;
+        }
+        
+        // Может ли преподаватель читать лекции
+        public bool CanTeachLectures()
+        {
+            return Position != TeacherPosition.Assistant;
+        }
+        
+        // Может ли преподаватель проводить лабораторные работы
+        public bool CanTeachLaboratory()
+        {
+            return Position != TeacherPosition.Professor;
+        }
+        
+        // Сохранение в строку для текстового файла
+        public string ToFileString()
+        {
+            return $"{Id}|{LastName}|{FirstName}|{MiddleName}|{(int)Position}|{(int)Degree}|" +
+                   $"{(int)Title}|{DepartmentId}|{IsPostgraduate}|{LeadsResearchTopics}|{LeadsResearchDirections}";
+        }
+        
+        // Загрузка из строки текстового файла
+        public static Teacher FromFileString(string line)
+        {
+            var parts = line.Split('|');
+            return new Teacher
+            {
+                Id = Guid.Parse(parts[0]),
+                LastName = parts[1],
+                FirstName = parts[2],
+                MiddleName = parts[3],
+                Position = (TeacherPosition)int.Parse(parts[4]),
+                Degree = (AcademicDegree)int.Parse(parts[5]),
+                Title = (AcademicTitle)int.Parse(parts[6]),
+                DepartmentId = Guid.Parse(parts[7]),
+                IsPostgraduate = bool.Parse(parts[8]),
+                LeadsResearchTopics = bool.Parse(parts[9]),
+                LeadsResearchDirections = bool.Parse(parts[10])
+            };
+        }
+        
+        private static string GetPositionString(TeacherPosition position)
+        {
+            return position switch
+            {
+                TeacherPosition.Assistant => "ассистент",
+                TeacherPosition.Lecturer => "преподаватель",
+                TeacherPosition.SeniorLecturer => "ст. преподаватель",
+                TeacherPosition.AssociateProfessor => "доцент",
+                TeacherPosition.Professor => "профессор",
+                _ => ""
+            };
+        }
+        
+        private static string GetDegreeString(AcademicDegree degree)
+        {
+            return degree switch
+            {
+                AcademicDegree.CandidateOfSciences => "к.н.",
+                AcademicDegree.DoctorOfSciences => "д.н.",
+                _ => ""
+            };
+        }
+        
+        private static string GetTitleString(AcademicTitle title)
+        {
+            return title switch
+            {
+                AcademicTitle.AssociateProfessor => "доцент",
+                AcademicTitle.Professor => "профессор",
+                _ => ""
+            };
+        }
+    }
+}
+using System;
+using ReactiveUI;
+namespace UniversityIS.Models
+{
+    // Модель учебной дисциплины
+    // Содержит информацию о предмете: название, курс, семестр, часы, форма контроля
+    // Дисциплина привязана к конкретной группе
+    public class Discipline : ReactiveObject
+    {
+        private Guid _id;
+        private string _name = string.Empty;
+        private int _course;
+        private int _semester;
+        private int _lectureHours;
+        private int _seminarHours;
+        private int _laboratoryHours;
+        private ControlForm _controlForm;
+        private Guid _groupId;
+        
+        // Уникальный идентификатор
+        
+        public Guid Id 
+        { 
+            get => _id;
+            set => this.RaiseAndSetIfChanged(ref _id, value);
+        }
+        
+        // Название дисциплины
+        
+        public string Name 
+        { 
+            get => _name;
+            set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+        
+        // Курс, на котором читается дисциплина
+        
+        public int Course 
+        { 
+            get => _course;
+            set => this.RaiseAndSetIfChanged(ref _course, value);
+        }
+        
+        // Семестр
+        
+        public int Semester 
+        { 
+            get => _semester;
+            set => this.RaiseAndSetIfChanged(ref _semester, value);
+        }
+        
+        // Количество часов лекций
+        
+        public int LectureHours 
+        { 
+            get => _lectureHours;
+            set => this.RaiseAndSetIfChanged(ref _lectureHours, value);
+        }
+        
+        // Количество часов семинаров
+        
+        public int SeminarHours 
+        { 
+            get => _seminarHours;
+            set => this.RaiseAndSetIfChanged(ref _seminarHours, value);
+        }
+        
+        // Количество часов лабораторных работ
+        
+        public int LaboratoryHours 
+        { 
+            get => _laboratoryHours;
+            set => this.RaiseAndSetIfChanged(ref _laboratoryHours, value);
+        }
+        
+        // Форма контроля
+        
+        public ControlForm ControlForm 
+        { 
+            get => _controlForm;
+            set => this.RaiseAndSetIfChanged(ref _controlForm, value);
+        }
+        
+        // Идентификатор группы
+        
+        public Guid GroupId 
+        { 
+            get => _groupId;
+            set => this.RaiseAndSetIfChanged(ref _groupId, value);
+        }
+        
+        public Discipline()
+        {
+            Id = Guid.NewGuid();
+            Name = string.Empty;
+            Course = 1;
+            Semester = 1;
+            LectureHours = 0;
+            SeminarHours = 0;
+            LaboratoryHours = 0;
+            ControlForm = ControlForm.Exam;
+        }
+        // Вычисляет номер курса на основе номера семестра
+        // Формула: 1-2 семестр = 1 курс, 3-4 = 2 курс, 5-6 = 3 курс и т.д.
+        public static int CalculateCourseFromSemester(int semester)
+        {
+            return (semester + 1) / 2;
+        }
+        // Устанавливает семестр и автоматически пересчитывает курс
+        // Это гарантирует, что курс всегда соответствует семестру
+        public void SetSemester(int semester)
+        {
+            Semester = semester;
+            Course = CalculateCourseFromSemester(semester);
+        }
+        
+        public override string ToString()
+        {
+            return $"{Name} ({Course} курс, {Semester} сем.)";
+        }
+        
+        // Преобразует объект дисциплины в строку для сохранения в текстовый файл
+        // Формат: Id|Name|Course|Semester|LectureHours|SeminarHours|LaboratoryHours|ControlForm|GroupId
+        public string ToFileString()
+        {
+            return $"{Id}|{Name}|{Course}|{Semester}|{LectureHours}|{SeminarHours}|{LaboratoryHours}|{(int)ControlForm}|{GroupId}";
+        }
+        
+        // Создает объект дисциплины из строки, загруженной из текстового файла
+        // Поддерживает обратную совместимость со старым форматом (без GroupId)
+        public static Discipline FromFileString(string line)
+        {
+            var parts = line.Split('|');
+            return new Discipline
+            {
+                Id = Guid.Parse(parts[0]),
+                Name = parts[1],
+                Course = int.Parse(parts[2]),
+                Semester = int.Parse(parts[3]),
+                LectureHours = int.Parse(parts[4]),
+                SeminarHours = int.Parse(parts[5]),
+                LaboratoryHours = int.Parse(parts[6]),
+                ControlForm = (ControlForm)int.Parse(parts[7]),
+                GroupId = parts.Length > 8 ? Guid.Parse(parts[8]) : Guid.Empty // Обратная совместимость
+            };
+        }
+    }
+}
+using System;
+using ReactiveUI;
+namespace UniversityIS.Models
+{
+    // Студент
+    public class Student : ReactiveObject
+    {
+        private Guid _id;
+        private string _lastName = string.Empty;
+        private string _firstName = string.Empty;
+        private string _middleName = string.Empty;
+        private Guid _groupId;
+        private string _recordBookNumber = string.Empty;
+        private double _gpa;
+        
+        // Уникальный идентификатор
+        public Guid Id 
+        { 
+            get => _id;
+            set => this.RaiseAndSetIfChanged(ref _id, value);
+        }
+        
+        // Фамилия
+        public string LastName 
+        { 
+            get => _lastName;
+            set => this.RaiseAndSetIfChanged(ref _lastName, value);
+        }
+        
+        // Имя
+        public string FirstName 
+        { 
+            get => _firstName;
+            set => this.RaiseAndSetIfChanged(ref _firstName, value);
+        }
+        
+        // Отчество
+        public string MiddleName 
+        { 
+            get => _middleName;
+            set => this.RaiseAndSetIfChanged(ref _middleName, value);
+        }
+        
+        // Идентификатор группы
+        public Guid GroupId 
+        { 
+            get => _groupId;
+            set => this.RaiseAndSetIfChanged(ref _groupId, value);
+        }
+        
+        // Номер зачётной книжки
+        public string RecordBookNumber 
+        { 
+            get => _recordBookNumber;
+            set => this.RaiseAndSetIfChanged(ref _recordBookNumber, value);
+        }
+        
+        // Средний балл
+        public double GPA 
+        { 
+            get => _gpa;
+            set => this.RaiseAndSetIfChanged(ref _gpa, value);
+        }
+        
+        public Student()
+        {
+            Id = Guid.NewGuid();
+            LastName = string.Empty;
+            FirstName = string.Empty;
+            MiddleName = string.Empty;
+            GroupId = Guid.Empty;
+            RecordBookNumber = string.Empty;
+            GPA = 0.0;
+        }
+        
+        // Полное имя студента
+        public string FullName => $"{LastName} {FirstName} {MiddleName}";
+        
+        public override string ToString()
+        {
+            return FullName;
+        }
+        
+        // Сохранение в строку для текстового файла
+        public string ToFileString()
+        {
+            return $"{Id}|{LastName}|{FirstName}|{MiddleName}|{GroupId}|{RecordBookNumber}|{GPA}";
+        }
+        
+        // Загрузка из строки текстового файла
+        public static Student FromFileString(string line)
+        {
+            var parts = line.Split('|');
+            return new Student
+            {
+                Id = Guid.Parse(parts[0]),
+                LastName = parts[1],
+                FirstName = parts[2],
+                MiddleName = parts[3],
+                GroupId = Guid.Parse(parts[4]),
+                RecordBookNumber = parts[5],
+                GPA = double.Parse(parts[6])
+            };
+        }
+    }
+}
+namespace UniversityIS.Models
+{
+    // Должность преподавателя
+    public enum TeacherPosition
+    {
+        // Ассистент
+        Assistant,
+        
+        // Преподаватель
+        Lecturer,
+        
+        // Старший преподаватель
+        SeniorLecturer,
+        
+        // Доцент
+        AssociateProfessor,
+        
+        // Профессор
+        Professor
+    }
+}
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using ReactiveUI;
+namespace UniversityIS.Models
+{
+    // Модель факультета университета
+    // Содержит информацию о факультете: название, декан, список групп и кафедр
+    public class Faculty : ReactiveObject
+    {
+        private Guid _id;
+        private string _name = string.Empty;
+        private string _dean = string.Empty;
+        
+        // Уникальный идентификатор факультета
+        public Guid Id 
+        { 
+            get => _id;
+            set => this.RaiseAndSetIfChanged(ref _id, value);
+        }
+        
+        // Название факультета
+        public string Name 
+        { 
+            get => _name;
+            set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+        
+        // ФИО декана факультета
+        public string Dean 
+        { 
+            get => _dean;
+            set => this.RaiseAndSetIfChanged(ref _dean, value);
+        }
+        
+        // Список идентификаторов групп, принадлежащих факультету
+        public List<Guid> GroupIds { get; set; }
+        
+        // Список идентификаторов кафедр, принадлежащих факультету
+        public List<Guid> DepartmentIds { get; set; }
+        
+        public Faculty()
+        {
+            Id = Guid.NewGuid();
+            Name = string.Empty;
+            Dean = string.Empty;
+            GroupIds = new List<Guid>();
+            DepartmentIds = new List<Guid>();
+        }
+        
+        public override string ToString()
+        {
+            return Name;
+        }
+        
+        // Преобразует объект факультета в строку для сохранения в текстовый файл
+        // Формат: Id|Name|Dean|GroupIds|DepartmentIds
+        public string ToFileString()
+        {
+            return $"{Id}|{Name}|{Dean}|{string.Join(",", GroupIds)}|{string.Join(",", DepartmentIds)}";
+        }
+        
+        // Создает объект факультета из строки, загруженной из текстового файла
+        // Парсит строку формата: Id|Name|Dean|GroupIds|DepartmentIds
+        public static Faculty FromFileString(string line)
+        {
+            var parts = line.Split('|');
+            var faculty = new Faculty
+            {
+                Id = Guid.Parse(parts[0]),
+                Name = parts[1],
+                Dean = parts[2]
+            };
+            
+            if (!string.IsNullOrEmpty(parts[3]))
+                faculty.GroupIds = parts[3].Split(',').Select(Guid.Parse).ToList();
+            
+            if (parts.Length > 4 && !string.IsNullOrEmpty(parts[4]))
+                faculty.DepartmentIds = parts[4].Split(',').Select(Guid.Parse).ToList();
+            
+            return faculty;
+        }
+    }
+}
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using ReactiveUI;
+namespace UniversityIS.Models
+{
+    // Кафедра
+    public class Department : ReactiveObject
+    {
+        private Guid _id;
+        private string _name = string.Empty;
+        private string _head = string.Empty;
+        private Guid _facultyId;
+        
+        // Уникальный идентификатор
+        public Guid Id 
+        { 
+            get => _id;
+            set => this.RaiseAndSetIfChanged(ref _id, value);
+        }
+        
+        // Название кафедры
+        public string Name 
+        { 
+            get => _name;
+            set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+        
+        // Заведующий кафедрой
+        public string Head 
+        { 
+            get => _head;
+            set => this.RaiseAndSetIfChanged(ref _head, value);
+        }
+        
+        // Идентификатор факультета, к которому относится кафедра
+        public Guid FacultyId 
+        { 
+            get => _facultyId;
+            set => this.RaiseAndSetIfChanged(ref _facultyId, value);
+        }
+        
+        // Список преподавателей кафедры
+        public List<Guid> TeacherIds { get; set; }
+        
+        public Department()
+        {
+            Id = Guid.NewGuid();
+            Name = string.Empty;
+            Head = string.Empty;
+            FacultyId = Guid.Empty;
+            TeacherIds = new List<Guid>();
+        }
+        
+        public override string ToString()
+        {
+            return Name;
+        }
+        
+        // Сохранение в строку для текстового файла
+        public string ToFileString()
+        {
+            return $"{Id}|{Name}|{Head}|{FacultyId}|{string.Join(",", TeacherIds)}";
+        }
+        
+        // Загрузка из строки текстового файла
+        public static Department FromFileString(string line)
+        {
+            var parts = line.Split('|');
+            var department = new Department
+            {
+                Id = Guid.Parse(parts[0]),
+                Name = parts[1],
+                Head = parts[2],
+                FacultyId = Guid.Parse(parts[3])
+            };
+            
+            if (parts.Length > 4 && !string.IsNullOrEmpty(parts[4]))
+                department.TeacherIds = parts[4].Split(',').Select(Guid.Parse).ToList();
+            
+            return department;
+        }
+    }
+}
+using System;
+using ReactiveUI;
+namespace UniversityIS.Models
+{
+    
+    // Дипломная работа
+    
+    public class ThesisWork : ReactiveObject
+    {
+        private Guid _id;
+        private string _title = string.Empty;
+        private Guid _studentId;
+        private Guid _supervisorId;
+        private int _year;
+        private string _grade = string.Empty;
+        
+        // Уникальный идентификатор
+        
+        public Guid Id 
+        { 
+            get => _id;
+            set => this.RaiseAndSetIfChanged(ref _id, value);
+        }
+        
+        // Название работы
+        
+        public string Title 
+        { 
+            get => _title;
+            set => this.RaiseAndSetIfChanged(ref _title, value);
+        }
+        
+        // Идентификатор студента
+        
+        public Guid StudentId 
+        { 
+            get => _studentId;
+            set => this.RaiseAndSetIfChanged(ref _studentId, value);
+        }
+        
+        // Идентификатор научного руководителя
+        
+        public Guid SupervisorId 
+        { 
+            get => _supervisorId;
+            set => this.RaiseAndSetIfChanged(ref _supervisorId, value);
+        }
+        
+        // Год защиты
+        
+        public int Year 
+        { 
+            get => _year;
+            set => this.RaiseAndSetIfChanged(ref _year, value);
+        }
+        
+        // Оценка (2-5, null если не выставлена)
+        
+        public int? Grade 
+        { 
+            get => string.IsNullOrEmpty(_grade) ? null : int.Parse(_grade);
+            set => this.RaiseAndSetIfChanged(ref _grade, value?.ToString() ?? string.Empty);
+        }
+        
+        public ThesisWork()
+        {
+            Id = Guid.NewGuid();
+            Title = string.Empty;
+            StudentId = Guid.Empty;
+            SupervisorId = Guid.Empty;
+            Year = DateTime.Now.Year;
+            Grade = null;
+        }
+        
+        // Сохранение в строку для текстового файла
+        
+        public string ToFileString()
+        {
+            return $"{Id}|{Title}|{StudentId}|{SupervisorId}|{Year}|{_grade}";
+        }
+        
+        // Загрузка из строки текстового файла
+        
+        public static ThesisWork FromFileString(string line)
+        {
+            var parts = line.Split('|');
+            var work = new ThesisWork
+            {
+                Id = Guid.Parse(parts[0]),
+                Title = parts[1],
+                StudentId = Guid.Parse(parts[2]),
+                SupervisorId = Guid.Parse(parts[3]),
+                Year = int.Parse(parts[4])
+            };
+            
+            // Парсим оценку: если пустая строка или не число - null, иначе int
+            if (!string.IsNullOrWhiteSpace(parts[5]) && int.TryParse(parts[5], out int gradeValue))
+            {
+                work.Grade = gradeValue;
+            }
+            else
+            {
+                work.Grade = null;
+            }
+            
+            return work;
+        }
+    }
+}
+using System;
+using ReactiveUI;
+namespace UniversityIS.Models
+{
+    // Модель связи преподавателя с дисциплиной
+    // Определяет, какие дисциплины может вести конкретный преподаватель
+    // Используется для фильтрации дисциплин при добавлении учебной нагрузки
+    public class TeacherDiscipline : ReactiveObject
+    {
+        private Guid _id;
+        private Guid _teacherId;
+        private Guid _disciplineId;
+        public TeacherDiscipline()
+        {
+            Id = Guid.NewGuid();
+        }
+        public Guid Id
+        {
+            get => _id;
+            set => this.RaiseAndSetIfChanged(ref _id, value);
+        }
+        public Guid TeacherId
+        {
+            get => _teacherId;
+            set => this.RaiseAndSetIfChanged(ref _teacherId, value);
+        }
+        public Guid DisciplineId
+        {
+            get => _disciplineId;
+            set => this.RaiseAndSetIfChanged(ref _disciplineId, value);
+        }
+        public string ToFileString()
+        {
+            return $"{Id}|{TeacherId}|{DisciplineId}";
+        }
+        public static TeacherDiscipline FromFileString(string line)
+        {
+            var parts = line.Split('|');
+            return new TeacherDiscipline
+            {
+                Id = Guid.Parse(parts[0]),
+                TeacherId = Guid.Parse(parts[1]),
+                DisciplineId = Guid.Parse(parts[2])
+            };
+        }
+    }
+}
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using ReactiveUI;
+namespace UniversityIS.Models
+{
+    // Учебная группа
+    public class Group : ReactiveObject
+    {
+        private Guid _id;
+        private string _number = string.Empty;
+        private int _yearOfAdmission;
+        private int _course;
+        private Guid _facultyId;
+        
+        // Уникальный идентификатор
+        public Guid Id 
+        { 
+            get => _id;
+            set => this.RaiseAndSetIfChanged(ref _id, value);
+        }
+        
+        // Номер группы
+        public string Number 
+        { 
+            get => _number;
+            set => this.RaiseAndSetIfChanged(ref _number, value);
+        }
+        
+        // Год набора
+        public int YearOfAdmission 
+        { 
+            get => _yearOfAdmission;
+            set => this.RaiseAndSetIfChanged(ref _yearOfAdmission, value);
+        }
+        
+        // Курс
+        public int Course 
+        { 
+            get => _course;
+            set => this.RaiseAndSetIfChanged(ref _course, value);
+        }
+        
+        // Идентификатор факультета
+        public Guid FacultyId 
+        { 
+            get => _facultyId;
+            set => this.RaiseAndSetIfChanged(ref _facultyId, value);
+        }
+        
+        // Список студентов группы
+        public List<Guid> StudentIds { get; set; }
+        
+        public Group()
+        {
+            Id = Guid.NewGuid();
+            Number = string.Empty;
+            YearOfAdmission = DateTime.Now.Year;
+            Course = 1;
+            FacultyId = Guid.Empty;
+            StudentIds = new List<Guid>();
+        }
+        
+        public override string ToString()
+        {
+            return $"{Number} ({Course} курс, {YearOfAdmission})";
+        }
+        
+        // Сохранение в строку для текстового файла
+        public string ToFileString()
+        {
+            return $"{Id}|{Number}|{YearOfAdmission}|{Course}|{FacultyId}|{string.Join(",", StudentIds)}";
+        }
+        
+        // Загрузка из строки текстового файла
+        public static Group FromFileString(string line)
+        {
+            var parts = line.Split('|');
+            var group = new Group
+            {
+                Id = Guid.Parse(parts[0]),
+                Number = parts[1],
+                YearOfAdmission = int.Parse(parts[2]),
+                Course = int.Parse(parts[3]),
+                FacultyId = Guid.Parse(parts[4])
+            };
+            
+            if (parts.Length > 5 && !string.IsNullOrEmpty(parts[5]))
+                group.StudentIds = parts[5].Split(',').Select(Guid.Parse).ToList();
+            
+            return group;
+        }
+    }
+}
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Data.Core;
+using Avalonia.Data.Core.Plugins;
+using System.Linq;
+using Avalonia.Markup.Xaml;
+using UniversityIS.ViewModels;
+using UniversityIS.Views;
+
+namespace UniversityIS;
+
+// Главный класс приложения
+// Инициализирует XAML и создает главное окно с ViewModel
+public partial class App : Application
+{
+    // Загружает XAML ресурсы приложения
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
+
+    // Вызывается после инициализации фреймворка
+    // Создает главное окно и настраивает приложение
+    public override void OnFrameworkInitializationCompleted()
+    {
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            // Отключаем дублирующую валидацию от Avalonia
+            // Используем только нашу собственную валидацию
+            DisableAvaloniaDataAnnotationValidation();
+            
+            // Создаем главное окно и привязываем к нему ViewModel
+            desktop.MainWindow = new MainWindow
+            {
+                DataContext = new MainWindowViewModel(),
+            };
+        }
+
+        base.OnFrameworkInitializationCompleted();
+    }
+
+    // Отключает встроенную валидацию Avalonia для избежания конфликтов
+    private void DisableAvaloniaDataAnnotationValidation()
+    {
+        var dataValidationPluginsToRemove =
+            BindingPlugins.DataValidators.OfType<DataAnnotationsValidationPlugin>().ToArray();
+
+        foreach (var plugin in dataValidationPluginsToRemove)
+        {
+            BindingPlugins.DataValidators.Remove(plugin);
+        }
+    }
+}
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+namespace UniversityIS.Views
+{
+    public partial class GradeInputWindow : Window
+    {
+        public GradeInputWindow()
+        {
+            InitializeComponent();
+        }
+        private void OnSaveClick(object? sender, RoutedEventArgs e)
+        {
+            Close(true); // Закрыть окно с результатом "сохранено"
+        }
+        private void OnCancelClick(object? sender, RoutedEventArgs e)
+        {
+            Close(false); // Закрыть окно без сохранения
+        }
+    }
+}
+using Avalonia.Controls;
+namespace UniversityIS.Views
+{
+    public partial class DepartmentsView : UserControl
+    {
+        public DepartmentsView()
+        {
+            InitializeComponent();
+        }
+    }
+}
+using Avalonia.Controls;
+namespace UniversityIS.Views
+{
+    public partial class FacultiesView : UserControl
+    {
+        public FacultiesView()
+        {
+            InitializeComponent();
+        }
+    }
+}
+using Avalonia.Controls;
+using UniversityIS.ViewModels;
+
+namespace UniversityIS.Views;
+
+public partial class MainWindow : Window
+{
+    public MainWindow()
+    {
+        InitializeComponent();
+        
+        // Автосохранение при закрытии окна
+        Closing += (sender, e) =>
+        {
+            if (DataContext is MainWindowViewModel viewModel)
+            {
+                viewModel.OnClosing();
+            }
+        };
+    }
+}
+using Avalonia.Controls;
+namespace UniversityIS.Views
+{
+    public partial class DisciplinesView : UserControl
+    {
+        public DisciplinesView()
+        {
+            InitializeComponent();
+        }
+    }
+}
+using Avalonia.Controls;
+namespace UniversityIS.Views
+{
+    public partial class TeachersView : UserControl
+    {
+        public TeachersView()
+        {
+            InitializeComponent();
+        }
+    }
+}
+using Avalonia.Controls;
+namespace UniversityIS.Views
+{
+    public partial class WorkLoadsView : UserControl
+    {
+        public WorkLoadsView()
+        {
+            InitializeComponent();
+        }
+    }
+}
+using Avalonia.Controls;
+namespace UniversityIS.Views
+{
+    public partial class ThesisWorksView : UserControl
+    {
+        public ThesisWorksView()
+        {
+            InitializeComponent();
+        }
+    }
+}
+using Avalonia.Controls;
+namespace UniversityIS.Views
+{
+    public partial class StudentProfileView : UserControl
+    {
+        public StudentProfileView()
+        {
+            InitializeComponent();
+        }
+    }
+}
+using Avalonia.Controls;
+namespace UniversityIS.Views
+{
+    public partial class GroupsView : UserControl
+    {
+        public GroupsView()
+        {
+            InitializeComponent();
+        }
+    }
+}
+using Avalonia.Controls;
+namespace UniversityIS.Views
+{
+    public partial class TeacherProfileView : UserControl
+    {
+        public TeacherProfileView()
+        {
+            InitializeComponent();
+        }
+    }
+}
+using Avalonia.Controls;
+namespace UniversityIS.Views
+{
+    public partial class StudentsView : UserControl
+    {
+        public StudentsView()
+        {
+            InitializeComponent();
+        }
+    }
+}
+using System;
+using System.Linq;
+using System.Text.RegularExpressions;
+namespace UniversityIS.Helpers
+{
+    // Вспомогательный класс для валидации вводимых данных
+    // Содержит методы проверки корректности различных типов данных
+    public static class ValidationHelper
+    {
+        // Проверяет, что строка содержит только буквы, пробелы, дефисы и точки
+        // Используется для валидации имен, фамилий и названий без цифр
+        public static bool IsValidName(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return false;
+            // Разрешаем буквы (русские и латинские), пробелы, дефисы, точки
+            return Regex.IsMatch(name, @"^[а-яА-ЯёЁa-zA-Z\s\.\-]+$");
+        }
+        // Проверяет, что строка содержит только буквы, цифры, пробелы, дефисы и точки
+        // Используется для валидации названий групп, дисциплин и других сущностей с цифрами
+        public static bool IsValidNameWithNumbers(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return false;
+            // Разрешаем буквы, цифры, пробелы, дефисы, точки
+            return Regex.IsMatch(name, @"^[а-яА-ЯёЁa-zA-Z0-9\s\.\-]+$");
+        }
+        // Проверяет, что строка является корректным годом
+        // Допустимый диапазон: 1900-2100
+        public static bool IsValidYear(string? year)
+        {
+            if (string.IsNullOrWhiteSpace(year))
+                return false;
+            if (!int.TryParse(year, out int yearValue))
+                return false;
+            return yearValue >= 1900 && yearValue <= 2100;
+        }
+        // Проверяет, что строка является корректным номером курса
+        // Допустимый диапазон: 1-6
+        public static bool IsValidCourse(string? course)
+        {
+            if (string.IsNullOrWhiteSpace(course))
+                return false;
+            if (!int.TryParse(course, out int courseValue))
+                return false;
+            return courseValue >= 1 && courseValue <= 6;
+        }
+        // Проверяет, что строка является корректным номером семестра
+        // Допустимый диапазон: 1-10
+        public static bool IsValidSemester(string? semester)
+        {
+            if (string.IsNullOrWhiteSpace(semester))
+                return false;
+            if (!int.TryParse(semester, out int semesterValue))
+                return false;
+            return semesterValue >= 1 && semesterValue <= 10;
+        }
+        // Проверяет, что строка является корректным количеством часов
+        // Допустимый диапазон: 1-1000
+        public static bool IsValidHours(string? hours)
+        {
+            if (string.IsNullOrWhiteSpace(hours))
+                return false;
+            if (!int.TryParse(hours, out int hoursValue))
+                return false;
+            return hoursValue > 0 && hoursValue <= 1000;
+        }
+        // Возвращает понятное сообщение об ошибке валидации
+        // fieldName - название поля, errorType - тип ошибки
+        public static string GetErrorMessage(string fieldName, string errorType)
+        {
+            return errorType switch
+            {
+                "empty" => $"Поле \"{fieldName}\" не может быть пустым.",
+                "invalid_name" => $"Поле \"{fieldName}\" должно содержать только буквы, пробелы, дефисы и точки (без цифр).",
+                "invalid_name_with_numbers" => $"Поле \"{fieldName}\" содержит недопустимые символы.",
+                "invalid_year" => $"Поле \"{fieldName}\" должно содержать корректный год (1900-2100).",
+                "invalid_course" => $"Поле \"{fieldName}\" должно быть числом от 1 до 6.",
+                "invalid_semester" => $"Поле \"{fieldName}\" должно быть числом от 1 до 10.",
+                "invalid_hours" => $"Поле \"{fieldName}\" должно быть положительным числом (1-1000).",
+                "not_selected" => $"Необходимо выбрать \"{fieldName}\".",
+                _ => "Неизвестная ошибка валидации."
+            };
+        }
+    }
+}
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using UniversityIS.Models;
+namespace UniversityIS.Services
+{
+    // Центральный сервис для работы с данными приложения
+    // Отвечает за загрузку и сохранение всех данных в текстовые файлы
+    // Все данные хранятся в папке Data в формате текстовых файлов
+    public class DataService
+    {
+        private static readonly string DataDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
+        
+        private const string FacultiesFile = "faculties.txt";
+        private const string DepartmentsFile = "departments.txt";
+        private const string GroupsFile = "groups.txt";
+        private const string StudentsFile = "students.txt";
+        private const string TeachersFile = "teachers.txt";
+        private const string DisciplinesFile = "disciplines.txt";
+        private const string WorkLoadsFile = "workloads.txt";
+        private const string ThesisWorksFile = "thesisworks.txt";
+        private const string GradesFile = "grades.txt";
+        private const string TeacherDisciplinesFile = "teacherdisciplines.txt";
+        
+        // Коллекции всех сущностей приложения
+        // Используются ObservableCollection для автоматического обновления UI при изменениях
+        public ObservableCollection<Faculty> Faculties { get; private set; }
+        public ObservableCollection<Department> Departments { get; private set; }
+        public ObservableCollection<Group> Groups { get; private set; }
+        public ObservableCollection<Student> Students { get; private set; }
+        public ObservableCollection<Teacher> Teachers { get; private set; }
+        public ObservableCollection<Discipline> Disciplines { get; private set; }
+        public ObservableCollection<WorkLoad> WorkLoads { get; private set; }
+        public ObservableCollection<ThesisWork> ThesisWorks { get; private set; }
+        public ObservableCollection<StudentGrade> Grades { get; private set; }
+        public ObservableCollection<TeacherDiscipline> TeacherDisciplines { get; private set; }
+        
+        public DataService()
+        {
+            Faculties = new ObservableCollection<Faculty>();
+            Departments = new ObservableCollection<Department>();
+            Groups = new ObservableCollection<Group>();
+            Students = new ObservableCollection<Student>();
+            Teachers = new ObservableCollection<Teacher>();
+            Disciplines = new ObservableCollection<Discipline>();
+            WorkLoads = new ObservableCollection<WorkLoad>();
+            ThesisWorks = new ObservableCollection<ThesisWork>();
+            Grades = new ObservableCollection<StudentGrade>();
+            TeacherDisciplines = new ObservableCollection<TeacherDiscipline>();
+            
+            EnsureDataDirectoryExists();
+        }
+        
+        // Создает папку Data для хранения файлов, если она не существует
+        private void EnsureDataDirectoryExists()
+        {
+            if (!Directory.Exists(DataDirectory))
+            {
+                Directory.CreateDirectory(DataDirectory);
+            }
+        }
+        
+        // Загружает все данные из текстовых файлов в память
+        // Вызывается при запуске приложения
+        public void LoadAllData()
+        {
+            LoadFaculties();
+            LoadDepartments();
+            LoadGroups();
+            LoadStudents();
+            LoadTeachers();
+            LoadDisciplines();
+            LoadWorkLoads();
+            LoadThesisWorks();
+            LoadGrades();
+            LoadTeacherDisciplines();
+        }
+        
+        // Сохраняет все данные из памяти в текстовые файлы
+        // Вызывается при закрытии приложения или по запросу пользователя
+        public void SaveAllData()
+        {
+            SaveTeacherDisciplines();
+            SaveGrades();
+            SaveFaculties();
+            SaveDepartments();
+            SaveGroups();
+            SaveStudents();
+            SaveTeachers();
+            SaveDisciplines();
+            SaveWorkLoads();
+            SaveThesisWorks();
+        }
+        
+        // Получить путь к папке с данными
+        
+        public string GetDataPath() => DataDirectory;
+        
+        #region Faculties
+        
+        // Загружает список факультетов из текстового файла
+        // Пропускает пустые и некорректные строки
+        private void LoadFaculties()
+        {
+            var path = Path.Combine(DataDirectory, FacultiesFile);
+            if (!File.Exists(path))
+            {
+                return;
+            }
+            
+            Faculties.Clear();
+            var lines = File.ReadAllLines(path);
+            foreach (var line in lines)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    try
+                    {
+                        Faculties.Add(Faculty.FromFileString(line));
+                    }
+                    catch
+                    {
+                        // Игнорируем ошибочные строки для стабильности работы
+                    }
+                }
+            }
+        }
+        
+        // Сохраняет список факультетов в текстовый файл
+        private void SaveFaculties()
+        {
+            var path = Path.Combine(DataDirectory, FacultiesFile);
+            var lines = Faculties.Select(f => f.ToFileString());
+            File.WriteAllLines(path, lines);
+        }
+        
+        #endregion
+        
+        #region Departments
+        
+        // Загружает список кафедр из текстового файла
+        private void LoadDepartments()
+        {
+            var path = Path.Combine(DataDirectory, DepartmentsFile);
+            if (!File.Exists(path))
+            {
+                return;
+            }
+            
+            Departments.Clear();
+            var lines = File.ReadAllLines(path);
+            foreach (var line in lines)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    try
+                    {
+                        Departments.Add(Department.FromFileString(line));
+                    }
+                    catch
+                    {
+                        // Игнорируем ошибочные строки
+                    }
+                }
+            }
+        }
+        
+        private void SaveDepartments()
+        {
+            var path = Path.Combine(DataDirectory, DepartmentsFile);
+            var lines = Departments.Select(d => d.ToFileString());
+            File.WriteAllLines(path, lines);
+        }
+        
+        #endregion
+        
+        #region Groups
+        
+        private void LoadGroups()
+        {
+            var path = Path.Combine(DataDirectory, GroupsFile);
+            if (!File.Exists(path))
+            {
+                return;
+            }
+            
+            Groups.Clear();
+            var lines = File.ReadAllLines(path);
+            foreach (var line in lines)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    try
+                    {
+                        Groups.Add(Group.FromFileString(line));
+                    }
+                    catch
+                    {
+                        // Игнорируем ошибочные строки
+                    }
+                }
+            }
+        }
+        
+        private void SaveGroups()
+        {
+            var path = Path.Combine(DataDirectory, GroupsFile);
+            var lines = Groups.Select(g => g.ToFileString());
+            File.WriteAllLines(path, lines);
+        }
+        
+        #endregion
+        
+        #region Students
+        
+        private void LoadStudents()
+        {
+            var path = Path.Combine(DataDirectory, StudentsFile);
+            if (!File.Exists(path))
+            {
+                return;
+            }
+            
+            Students.Clear();
+            var lines = File.ReadAllLines(path);
+            foreach (var line in lines)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    try
+                    {
+                        Students.Add(Student.FromFileString(line));
+                    }
+                    catch
+                    {
+                        // Игнорируем ошибочные строки
+                    }
+                }
+            }
+        }
+        
+        private void SaveStudents()
+        {
+            var path = Path.Combine(DataDirectory, StudentsFile);
+            var lines = Students.Select(s => s.ToFileString());
+            File.WriteAllLines(path, lines);
+        }
+        
+        #endregion
+        
+        #region Teachers
+        
+        private void LoadTeachers()
+        {
+            var path = Path.Combine(DataDirectory, TeachersFile);
+            if (!File.Exists(path))
+            {
+                return;
+            }
+            
+            Teachers.Clear();
+            var lines = File.ReadAllLines(path);
+            foreach (var line in lines)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    try
+                    {
+                        Teachers.Add(Teacher.FromFileString(line));
+                    }
+                    catch
+                    {
+                        // Игнорируем ошибочные строки
+                    }
+                }
+            }
+        }
+        
+        private void SaveTeachers()
+        {
+            var path = Path.Combine(DataDirectory, TeachersFile);
+            var lines = Teachers.Select(t => t.ToFileString());
+            File.WriteAllLines(path, lines);
+        }
+        
+        #endregion
+        
+        #region Disciplines
+        
+        private void LoadDisciplines()
+        {
+            var path = Path.Combine(DataDirectory, DisciplinesFile);
+            if (!File.Exists(path))
+            {
+                return;
+            }
+            
+            Disciplines.Clear();
+            var lines = File.ReadAllLines(path);
+            foreach (var line in lines)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    try
+                    {
+                        Disciplines.Add(Discipline.FromFileString(line));
+                    }
+                    catch
+                    {
+                        // Игнорируем ошибочные строки
+                    }
+                }
+            }
+        }
+        
+        private void SaveDisciplines()
+        {
+            var path = Path.Combine(DataDirectory, DisciplinesFile);
+            var lines = Disciplines.Select(d => d.ToFileString());
+            File.WriteAllLines(path, lines);
+        }
+        
+        #endregion
+        
+        #region WorkLoads
+        
+        private void LoadWorkLoads()
+        {
+            var path = Path.Combine(DataDirectory, WorkLoadsFile);
+            if (!File.Exists(path))
+            {
+                return;
+            }
+            
+            WorkLoads.Clear();
+            var lines = File.ReadAllLines(path);
+            foreach (var line in lines)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    try
+                    {
+                        WorkLoads.Add(WorkLoad.FromFileString(line));
+                    }
+                    catch
+                    {
+                        // Игнорируем ошибочные строки
+                    }
+                }
+            }
+        }
+        
+        private void SaveWorkLoads()
+        {
+            var path = Path.Combine(DataDirectory, WorkLoadsFile);
+            var lines = WorkLoads.Select(w => w.ToFileString());
+            File.WriteAllLines(path, lines);
+        }
+        
+        #endregion
+        
+        #region ThesisWorks
+        
+        private void LoadThesisWorks()
+        {
+            var path = Path.Combine(DataDirectory, ThesisWorksFile);
+            if (!File.Exists(path))
+            {
+                return;
+            }
+            
+            ThesisWorks.Clear();
+            var lines = File.ReadAllLines(path);
+            foreach (var line in lines)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    try
+                    {
+                        ThesisWorks.Add(ThesisWork.FromFileString(line));
+                    }
+                    catch
+                    {
+                        // Игнорируем ошибочные строки
+                    }
+                }
+            }
+        }
+        
+        private void SaveThesisWorks()
+        {
+            var path = Path.Combine(DataDirectory, ThesisWorksFile);
+            var lines = ThesisWorks.Select(t => t.ToFileString());
+            File.WriteAllLines(path, lines);
+        }
+        private void LoadGrades()
+        {
+            var path = Path.Combine(DataDirectory, GradesFile);
+            if (!File.Exists(path)) return;
+            var lines = File.ReadAllLines(path);
+            foreach (var line in lines)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    Grades.Add(StudentGrade.FromFileString(line));
+                }
+            }
+        }
+        private void SaveGrades()
+        {
+            var path = Path.Combine(DataDirectory, GradesFile);
+            var lines = Grades.Select(g => g.ToFileString());
+            File.WriteAllLines(path, lines);
+        }
+        private void LoadTeacherDisciplines()
+        {
+            var path = Path.Combine(DataDirectory, TeacherDisciplinesFile);
+            if (!File.Exists(path)) return;
+            var lines = File.ReadAllLines(path);
+            foreach (var line in lines)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    TeacherDisciplines.Add(TeacherDiscipline.FromFileString(line));
+                }
+            }
+        }
+        private void SaveTeacherDisciplines()
+        {
+            var path = Path.Combine(DataDirectory, TeacherDisciplinesFile);
+            var lines = TeacherDisciplines.Select(td => td.ToFileString());
+            File.WriteAllLines(path, lines);
+        }
+        
+        #endregion
+        
+        #region Helper Methods
+        
+        // Вспомогательные методы для поиска сущностей по ID
+        // Используются во всех ViewModel для получения связанных объектов
+        
+        // Находит факультет по его уникальному идентификатору
+        public Faculty? GetFaculty(Guid id)
+        {
+            return Faculties.FirstOrDefault(f => f.Id == id);
+        }
+        
+        // Находит кафедру по ее уникальному идентификатору
+        public Department? GetDepartment(Guid id)
+        {
+            return Departments.FirstOrDefault(d => d.Id == id);
+        }
+        
+        // Находит учебную группу по ее уникальному идентификатору
+        public Group? GetGroup(Guid id)
+        {
+            return Groups.FirstOrDefault(g => g.Id == id);
+        }
+        
+        // Находит студента по его уникальному идентификатору
+        public Student? GetStudent(Guid id)
+        {
+            return Students.FirstOrDefault(s => s.Id == id);
+        }
+        
+        // Находит преподавателя по его уникальному идентификатору
+        public Teacher? GetTeacher(Guid id)
+        {
+            return Teachers.FirstOrDefault(t => t.Id == id);
+        }
+        
+        // Находит дисциплину по ее уникальному идентификатору
+        public Discipline? GetDiscipline(Guid id)
+        {
+            return Disciplines.FirstOrDefault(d => d.Id == id);
+        }
+        
+        // Возвращает список всех кафедр, принадлежащих указанному факультету
+        public List<Department> GetDepartmentsByFaculty(Guid facultyId)
+        {
+            return Departments.Where(d => d.FacultyId == facultyId).ToList();
+        }
+        
+        // Возвращает список всех групп, принадлежащих указанному факультету
+        public List<Group> GetGroupsByFaculty(Guid facultyId)
+        {
+            return Groups.Where(g => g.FacultyId == facultyId).ToList();
+        }
+        
+        // Возвращает список всех студентов указанной группы
+        public List<Student> GetStudentsByGroup(Guid groupId)
+        {
+            return Students.Where(s => s.GroupId == groupId).ToList();
+        }
+        
+        // Возвращает список всех преподавателей указанной кафедры
+        public List<Teacher> GetTeachersByDepartment(Guid departmentId)
+        {
+            return Teachers.Where(t => t.DepartmentId == departmentId).ToList();
+        }
+        
+        // Возвращает список всей учебной нагрузки указанного преподавателя
+        public List<WorkLoad> GetWorkLoadsByTeacher(Guid teacherId)
+        {
+            return WorkLoads.Where(w => w.TeacherId == teacherId).ToList();
+        }
+        
+        // Возвращает список всех дипломных работ, которыми руководит указанный преподаватель
+        public List<ThesisWork> GetThesisWorksBySupervisor(Guid supervisorId)
+        {
+            return ThesisWorks.Where(t => t.SupervisorId == supervisorId).ToList();
+        }
+        
+        #endregion
+    }
+}
+﻿using Avalonia;
+using Avalonia.ReactiveUI;
+using System;
+
+namespace UniversityIS;
+
+// Точка входа в приложение
+// Инициализирует Avalonia UI и запускает приложение
+sealed class Program
+{
+    // Главный метод приложения - точка входа
+    // Настраивает и запускает Avalonia приложение
+    [STAThread]
+    public static void Main(string[] args) => BuildAvaloniaApp()
+        .StartWithClassicDesktopLifetime(args);
+
+    // Настройка Avalonia приложения
+    // Конфигурирует платформу, шрифты, логирование и ReactiveUI
+    public static AppBuilder BuildAvaloniaApp()
+        => AppBuilder.Configure<App>()
+            .UsePlatformDetect()
+            .WithInterFont()
+            .LogToTrace()
+            .UseReactiveUI();
+}

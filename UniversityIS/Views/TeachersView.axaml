@@ -1,0 +1,192 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:UniversityIS.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+             x:Class="UniversityIS.Views.TeachersView"
+             x:DataType="vm:TeachersViewModel">
+   
+    <Grid RowDefinitions="Auto,*">
+        <Border Grid.Row="0" Background="#3498db" Padding="15" CornerRadius="5" Margin="0,0,0,15">
+            <TextBlock Text="УПРАВЛЕНИЕ ПРЕПОДАВАТЕЛЯМИ" 
+                       FontSize="22" 
+                       FontWeight="Bold" 
+                       Foreground="White"
+                       HorizontalAlignment="Center"/>
+        </Border>
+        
+        <Grid Grid.Row="1" ColumnDefinitions="*,400">
+            <!-- Список преподавателей -->
+            <Border Grid.Column="0" 
+                    Background="#F0F0F0" 
+                    CornerRadius="8" 
+                    Padding="15"
+                    Margin="0,0,15,0"
+                    BorderBrush="#3498db" 
+                    BorderThickness="2">
+                <Grid RowDefinitions="Auto,*">
+                    <StackPanel Grid.Row="0" Margin="0,0,0,15">
+                        <TextBlock FontSize="16"
+                                   FontWeight="Bold"
+                                   Foreground="#2c3e50">
+                            <Run Text="Список преподавателей (всего: "/>
+                            <Run Text="{Binding Teachers.Count}"/>
+                            <Run Text=")"/>
+                        </TextBlock>
+                    </StackPanel>
+                    
+                    <ListBox Grid.Row="1"
+                             ItemsSource="{Binding Teachers}"
+                             SelectedItem="{Binding SelectedTeacher}"
+                             Background="Transparent"
+                             BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#F0F0F0"
+                                        Margin="0,0,0,8"
+                                        Padding="15"
+                                        CornerRadius="5"
+                                        BorderBrush="#3498db"
+                                        BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock FontSize="16" FontWeight="Bold" Foreground="#2c3e50">
+                                            <Run Text=""/>
+                                            <Run Text="{Binding LastName}"/>
+                                            <Run Text=" "/>
+                                            <Run Text="{Binding FirstName}"/>
+                                            <Run Text=" "/>
+                                            <Run Text="{Binding MiddleName}"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="14" Foreground="#2c3e50" Margin="0,5,0,0">
+                                            <Run Text="📌 "/>
+                                            <Run Text="{Binding Position}"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="13" Foreground="#34495e" Margin="0,3,0,0">
+                                            <Run Text=""/>
+                                            <Run Text="{Binding Degree}"/>
+                                            <Run Text=" | "/>
+                                            <Run Text="{Binding Title}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                                <Setter Property="Background" Value="Transparent"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected Border">
+                                <Setter Property="Background" Value="#e3f2fd"/>
+                                <Setter Property="BorderBrush" Value="#2196f3"/>
+                                <Setter Property="BorderThickness" Value="3"/>
+                            </Style>
+                        </ListBox.Styles>
+                    </ListBox>
+                </Grid>
+            </Border>
+            
+            <!-- Форма редактирования -->
+            <Border Grid.Column="1" 
+                    Background="#F0F0F0"
+                    BorderBrush="#3498db" 
+                    BorderThickness="3" 
+                    CornerRadius="8"
+                    Padding="20">
+                <ScrollViewer>
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="ДОБАВИТЬ ПРЕПОДАВАТЕЛЯ" 
+                                   FontSize="17" 
+                                   FontWeight="Bold"
+                                   Foreground="#2c3e50"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,8"/>
+                        
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Фамилия:" FontWeight="SemiBold" FontSize="12" Foreground="#2c3e50"/>
+                            <TextBox Text="{Binding LastName}" Watermark="Иванов" FontSize="12" Padding="8" Background="#F0F0F0" BorderBrush="#3498db" BorderThickness="2"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Имя:" FontWeight="SemiBold" FontSize="12" Foreground="#2c3e50"/>
+                            <TextBox Text="{Binding FirstName}" Watermark="Иван" FontSize="12" Padding="8" Background="#F0F0F0" BorderBrush="#3498db" BorderThickness="2"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Отчество:" FontWeight="SemiBold" FontSize="12" Foreground="#2c3e50"/>
+                            <TextBox Text="{Binding MiddleName}" Watermark="Иванович" FontSize="12" Padding="8" Background="#F0F0F0" BorderBrush="#3498db" BorderThickness="2"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Должность:" FontWeight="SemiBold" FontSize="12" Foreground="#2c3e50"/>
+                            <ComboBox ItemsSource="{Binding Positions}" SelectedItem="{Binding SelectedPositionItem}" HorizontalAlignment="Stretch" FontSize="12" Padding="8" Background="#F0F0F0" BorderBrush="#3498db" BorderThickness="2"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Учёная степень:" FontWeight="SemiBold" FontSize="12" Foreground="#2c3e50"/>
+                            <ComboBox ItemsSource="{Binding Degrees}" SelectedItem="{Binding SelectedDegreeItem}" HorizontalAlignment="Stretch" FontSize="12" Padding="8" Background="#F0F0F0" BorderBrush="#3498db" BorderThickness="2"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Учёное звание:" FontWeight="SemiBold" FontSize="12" Foreground="#2c3e50"/>
+                            <ComboBox ItemsSource="{Binding Titles}" SelectedItem="{Binding SelectedTitleItem}" HorizontalAlignment="Stretch" FontSize="12" Padding="8" Background="#F0F0F0" BorderBrush="#3498db" BorderThickness="2"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Кафедра:" FontWeight="SemiBold" FontSize="12" Foreground="#2c3e50"/>
+                            <ComboBox ItemsSource="{Binding Departments}" SelectedItem="{Binding SelectedDepartment}" HorizontalAlignment="Stretch" FontSize="12" Padding="8" Background="#F0F0F0" BorderBrush="#3498db" BorderThickness="2"/>
+                        </StackPanel>
+
+                        <!-- Сообщение об ошибке -->
+                        <Border Background="#ffebee" 
+                                BorderBrush="#e74c3c" 
+                                BorderThickness="2" 
+                                CornerRadius="5"
+                                Padding="8"
+                                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <TextBlock Text="{Binding ErrorMessage}" 
+                                       Foreground="#c62828" 
+                                       FontWeight="SemiBold"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"/>
+                        </Border>
+                        
+                        <Border Background="#f0f8ff" 
+                                Padding="10" 
+                                CornerRadius="5" 
+                                Margin="0,5,0,0"
+                                BorderBrush="#3498db"
+                                BorderThickness="2">
+                            <StackPanel Spacing="8">
+                                <CheckBox IsChecked="{Binding IsPostgraduate}" Content="Обучается в аспирантуре" FontSize="12" FontWeight="SemiBold"/>
+                                <CheckBox IsChecked="{Binding LeadsResearchTopics}" Content="Руководит научными темами" FontSize="12" FontWeight="SemiBold"/>
+                                <CheckBox IsChecked="{Binding LeadsResearchDirections}" Content="Руководит научными направлениями" FontSize="12" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Border>
+                        
+                        <StackPanel Spacing="8" Margin="0,12,0,0">
+                            <Button Content="ДОБАВИТЬ ПРЕПОДАВАТЕЛЯ" Command="{Binding AddCommand}" HorizontalAlignment="Stretch" Background="#27ae60" Foreground="White" FontSize="12" FontWeight="Bold" Padding="10" BorderThickness="0"/>
+                            <Button Content="Обновить" Command="{Binding UpdateCommand}" HorizontalAlignment="Stretch" Background="#f39c12" Foreground="White" FontSize="11" FontWeight="SemiBold" Padding="8" BorderThickness="0"/>
+                            <Button Content="Удалить" Command="{Binding DeleteCommand}" HorizontalAlignment="Stretch" Background="#e74c3c" Foreground="White" FontSize="11" FontWeight="SemiBold" Padding="8" BorderThickness="0"/>
+                            <Button Content="ПРОФИЛЬ ПРЕПОДАВАТЕЛЯ" 
+                                    Command="{Binding ShowProfileCommand}" 
+                                    HorizontalAlignment="Stretch" 
+                                    Background="#e67e22" 
+                                    Foreground="White" 
+                                    FontSize="13" 
+                                    FontWeight="Bold" 
+                                    Padding="10" 
+                                    BorderThickness="0"
+                                    Margin="0,10,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+    
+</UserControl>

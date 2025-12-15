@@ -1,0 +1,132 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:UniversityIS.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="550"
+        x:Class="UniversityIS.Views.GradeInputWindow"
+        x:DataType="vm:GradeInputViewModel"
+        Title="Выставление оценки"
+        Width="500"
+        Height="550"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+    
+    <Border Background="#ecf0f1" Padding="20">
+        <StackPanel Spacing="15">
+            <!-- Заголовок -->
+            <Border Background="#3498db" Padding="15" CornerRadius="5">
+                <StackPanel>
+                    <TextBlock Text="ВЫСТАВЛЕНИЕ ОЦЕНКИ" 
+                               FontSize="18" 
+                               FontWeight="Bold" 
+                               Foreground="White"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding DisciplineName}" 
+                               FontSize="14" 
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               Margin="0,5,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Информация о студенте и предмете -->
+            <Border Background="White" Padding="15" CornerRadius="5" BorderBrush="#3498db" BorderThickness="2">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="13" Foreground="#2c3e50">
+                        <Run Text="Студент: " FontWeight="SemiBold"/>
+                        <Run Text="{Binding StudentName}"/>
+                    </TextBlock>
+                    <TextBlock FontSize="13" Foreground="#2c3e50">
+                        <Run Text="Форма контроля: " FontWeight="SemiBold"/>
+                        <Run Text="{Binding ControlFormName}"/>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <!-- Ввод баллов за семестр -->
+            <Border Background="White" Padding="15" CornerRadius="5" BorderBrush="#27ae60" BorderThickness="2">
+                <StackPanel Spacing="10">
+                    <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#27ae60">
+                        <Run Text="Баллы за семестр (макс: "/>
+                        <Run Text="{Binding MaxSemesterPoints}"/>
+                        <Run Text=")"/>
+                    </TextBlock>
+                    <NumericUpDown Value="{Binding SemesterPoints}"
+                                   Minimum="0"
+                                   Maximum="{Binding MaxSemesterPoints}"
+                                   Increment="1"
+                                   Background="#F0F0F0"
+                                   FontSize="14"
+                                   Height="40"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Ввод баллов на экзамене/зачете -->
+            <Border Background="White" Padding="15" CornerRadius="5" BorderBrush="#e67e22" BorderThickness="2">
+                <StackPanel Spacing="10">
+                    <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#e67e22">
+                        <Run Text="Баллы на экзамене/зачете (макс: "/>
+                        <Run Text="{Binding MaxExamPoints}"/>
+                        <Run Text=")"/>
+                    </TextBlock>
+                    <NumericUpDown Value="{Binding ExamPoints}"
+                                   Minimum="0"
+                                   Maximum="{Binding MaxExamPoints}"
+                                   Increment="1"
+                                   Background="#F0F0F0"
+                                   FontSize="14"
+                                   Height="40"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Результат -->
+            <Border Background="#9b59b6" Padding="15" CornerRadius="5">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="16" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center">
+                        <Run Text="Итого: "/>
+                        <Run Text="{Binding TotalPoints}"/>
+                        <Run Text=" баллов"/>
+                    </TextBlock>
+                    <TextBlock Text="{Binding Grade}" 
+                               FontSize="18" 
+                               FontWeight="Bold" 
+                               Foreground="White"
+                               HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Сообщение об ошибке -->
+            <TextBlock Text="{Binding ErrorMessage}" 
+                       Foreground="Red" 
+                       FontSize="12" 
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+            <!-- Кнопки -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10" Margin="0,10,0,0">
+                <Button Content="СОХРАНИТЬ" 
+                        Command="{Binding SaveCommand}"
+                        Click="OnSaveClick"
+                        Background="#27ae60"
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="Bold"
+                        Padding="20,12"
+                        BorderThickness="0"
+                        CornerRadius="5"/>
+                <Button Content="ОТМЕНА" 
+                        Click="OnCancelClick"
+                        Background="#95a5a6"
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="Bold"
+                        Padding="20,12"
+                        BorderThickness="0"
+                        CornerRadius="5"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+    
+</Window>
+

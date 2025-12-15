@@ -1,0 +1,216 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:UniversityIS.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+             x:Class="UniversityIS.Views.ThesisWorksView"
+             x:DataType="vm:ThesisWorksViewModel">
+   
+    <Grid RowDefinitions="Auto,*">
+        <Border Grid.Row="0" Background="#3498db" Padding="15" CornerRadius="5" Margin="0,0,0,15">
+            <TextBlock Text="УПРАВЛЕНИЕ ДИПЛОМНЫМИ РАБОТАМИ" 
+                       FontSize="22" 
+                       FontWeight="Bold" 
+                       Foreground="White"
+                       HorizontalAlignment="Center"/>
+        </Border>
+        
+        <Grid Grid.Row="1" ColumnDefinitions="*,380">
+            <!-- Список дипломных работ -->
+            <Border Grid.Column="0" 
+                    Background="#F0F0F0" 
+                    CornerRadius="8" 
+                    Padding="15"
+                    Margin="0,0,15,0"
+                    BorderBrush="#3498db" 
+                    BorderThickness="2">
+                <Grid RowDefinitions="Auto,*">
+                    <StackPanel Grid.Row="0" Margin="0,0,0,15">
+                        <TextBlock FontSize="16"
+                                   FontWeight="Bold"
+                                   Foreground="#2c3e50">
+                            <Run Text="Дипломные работы (всего: "/>
+                            <Run Text="{Binding ThesisWorks.Count}"/>
+                            <Run Text=")"/>
+                        </TextBlock>
+                    </StackPanel>
+                    
+                    <ListBox Grid.Row="1"
+                             ItemsSource="{Binding ThesisWorks}"
+                             SelectedItem="{Binding SelectedThesisWork}"
+                             Background="Transparent"
+                             BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#F0F0F0"
+                                        Margin="0,0,0,8"
+                                        Padding="15"
+                                        CornerRadius="5"
+                                        BorderBrush="#3498db"
+                                        BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock FontSize="15" FontWeight="Bold" Foreground="#2c3e50" TextWrapping="Wrap">
+                                            <Run Text=""/>
+                                            <Run Text="{Binding Title}"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="13" Foreground="#2c3e50" Margin="0,5,0,0">
+                                            <Run Text="Год: "/>
+                                            <Run Text="{Binding Year}"/>
+                                            <Run Text=" | Оценка: "/>
+                                            <Run Text="{Binding Grade}" FontWeight="Bold"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                                <Setter Property="Background" Value="Transparent"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected Border">
+                                <Setter Property="Background" Value="#e3f2fd"/>
+                                <Setter Property="BorderBrush" Value="#2196f3"/>
+                                <Setter Property="BorderThickness" Value="3"/>
+                            </Style>
+                        </ListBox.Styles>
+                    </ListBox>
+                </Grid>
+            </Border>
+            
+            <!-- Форма редактирования -->
+            <Border Grid.Column="1" 
+                    Background="#F0F0F0"
+                    BorderBrush="#3498db" 
+                    BorderThickness="3" 
+                    CornerRadius="8"
+                    Padding="20">
+                <ScrollViewer>
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="ДОБАВИТЬ ДИПЛОМНУЮ РАБОТУ" 
+                                   FontSize="16" 
+                                   FontWeight="Bold"
+                                   Foreground="#2c3e50"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,8"
+                                   TextWrapping="Wrap"/>
+                        
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Название работы:" FontWeight="SemiBold" FontSize="13" Foreground="#2c3e50"/>
+                            <TextBox Text="{Binding Title}" 
+                                     Watermark="Например: Разработка информационной системы" 
+                                     FontSize="12" 
+                                     Padding="8" 
+                                     Background="#F0F0F0" 
+                                     BorderBrush="#3498db" 
+                                     BorderThickness="2"
+                                     TextWrapping="Wrap"
+                                     AcceptsReturn="True"
+                                     Height="80"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Студент:" FontWeight="SemiBold" FontSize="13" Foreground="#2c3e50"/>
+                            <ComboBox ItemsSource="{Binding Students}" 
+                                      SelectedItem="{Binding SelectedStudent}" 
+                                      HorizontalAlignment="Stretch" 
+                                      FontSize="12" 
+                                      Padding="8" 
+                                      Background="#F0F0F0" 
+                                      BorderBrush="#3498db" 
+                                      BorderThickness="2"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Научный руководитель:" FontWeight="SemiBold" FontSize="13" Foreground="#2c3e50"/>
+                            <ComboBox ItemsSource="{Binding Supervisors}" 
+                                      SelectedItem="{Binding SelectedSupervisor}" 
+                                      HorizontalAlignment="Stretch" 
+                                      FontSize="12" 
+                                      Padding="8" 
+                                      Background="#F0F0F0" 
+                                      BorderBrush="#3498db" 
+                                      BorderThickness="2"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Год защиты:" FontWeight="SemiBold" FontSize="13" Foreground="#2c3e50"/>
+                            <NumericUpDown Value="{Binding Year}" 
+                                           Minimum="2000" 
+                                           Maximum="2100" 
+                                           FontSize="12" 
+                                           Padding="8" 
+                                           Background="#F0F0F0" 
+                                           BorderBrush="#3498db" 
+                                           BorderThickness="2"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Оценка (2-5):" FontWeight="SemiBold" FontSize="13" Foreground="#2c3e50"/>
+                            <NumericUpDown Value="{Binding Grade}"
+                                           Minimum="2"
+                                           Maximum="5"
+                                           Increment="1"
+                                           AllowSpin="True"
+                                           FontSize="12"
+                                           Padding="8"
+                                           Background="#F0F0F0"
+                                           BorderBrush="#3498db"
+                                           BorderThickness="2"
+                                           Height="40"/>
+                        </StackPanel>
+
+                        <!-- Сообщение об ошибке -->
+                        <Border Background="#ffebee" 
+                                BorderBrush="#e74c3c" 
+                                BorderThickness="2" 
+                                CornerRadius="5"
+                                Padding="10"
+                                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <TextBlock Text="{Binding ErrorMessage}" 
+                                       Foreground="#c62828" 
+                                       FontWeight="SemiBold"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"/>
+                        </Border>
+                        
+                        <StackPanel Spacing="8" Margin="0,12,0,0">
+                            <Button Content="ДОБАВИТЬ РАБОТУ" 
+                                    Command="{Binding AddCommand}" 
+                                    HorizontalAlignment="Stretch" 
+                                    Background="#27ae60" 
+                                    Foreground="White" 
+                                    FontSize="13" 
+                                    FontWeight="Bold" 
+                                    Padding="10" 
+                                    BorderThickness="0"/>
+                            <Button Content="Обновить" 
+                                    Command="{Binding UpdateCommand}" 
+                                    HorizontalAlignment="Stretch" 
+                                    Background="#f39c12" 
+                                    Foreground="White" 
+                                    FontSize="12" 
+                                    FontWeight="SemiBold" 
+                                    Padding="8" 
+                                    BorderThickness="0"/>
+                            <Button Content="Удалить" 
+                                    Command="{Binding DeleteCommand}" 
+                                    HorizontalAlignment="Stretch" 
+                                    Background="#e74c3c" 
+                                    Foreground="White" 
+                                    FontSize="12" 
+                                    FontWeight="SemiBold" 
+                                    Padding="8" 
+                                    BorderThickness="0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+    
+</UserControl>

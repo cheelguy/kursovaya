@@ -1,0 +1,167 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:UniversityIS.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+             x:Class="UniversityIS.Views.TeacherProfileView"
+             x:DataType="vm:TeacherProfileViewModel">
+    
+    <Grid RowDefinitions="Auto,*">
+        <!-- Заголовок профиля -->
+        <Border Grid.Row="0" Background="#e67e22" Padding="15" CornerRadius="5" Margin="0,0,0,15">
+            <StackPanel>
+                <TextBlock Text="ПРОФИЛЬ ПРЕПОДАВАТЕЛЯ" 
+                           FontSize="22" 
+                           FontWeight="Bold" 
+                           Foreground="White"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="{Binding TeacherName}" 
+                           FontSize="18" 
+                           FontWeight="SemiBold" 
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           Margin="0,5,0,0"/>
+                <TextBlock FontSize="14" 
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           Margin="0,3,0,0">
+                    <Run Text="{Binding Position}"/>
+                    <Run Text=" | "/>
+                    <Run Text="{Binding Department}"/>
+                </TextBlock>
+            </StackPanel>
+        </Border>
+        
+        <!-- Управление дисциплинами -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*">
+            
+            <!-- Дисциплины преподавателя -->
+            <Border Grid.Column="0" 
+                    Background="White" 
+                    CornerRadius="8" 
+                    Padding="15"
+                    Margin="0,0,10,0"
+                    BorderBrush="#e67e22" 
+                    BorderThickness="2">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <TextBlock Grid.Row="0" 
+                               Text="МОИ ДИСЦИПЛИНЫ" 
+                               FontSize="16" 
+                               FontWeight="Bold"
+                               Foreground="#e67e22"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,10"/>
+                    
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding TeacherDisciplines}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#ffeaa7"
+                                            Margin="0,0,0,8"
+                                            Padding="12"
+                                            CornerRadius="5"
+                                            BorderBrush="#e67e22"
+                                            BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" 
+                                                       FontSize="14" 
+                                                       FontWeight="Bold" 
+                                                       Foreground="#2c3e50"
+                                                       TextWrapping="Wrap"/>
+                                            <TextBlock FontSize="12" Foreground="#34495e" Margin="0,5,0,0">
+                                                <Run Text="Курс "/>
+                                                <Run Text="{Binding Course}"/>
+                                                <Run Text=" | Семестр "/>
+                                                <Run Text="{Binding Semester}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    
+                    <Button Grid.Row="2"
+                            Content="УДАЛИТЬ ВЫБРАННУЮ"
+                            Command="{Binding RemoveDisciplineCommand}"
+                            Background="#e74c3c"
+                            Foreground="White"
+                            FontSize="13"
+                            FontWeight="Bold"
+                            Padding="10"
+                            BorderThickness="0"
+                            Margin="0,10,0,0"/>
+                </Grid>
+            </Border>
+            
+            <!-- Добавление новых дисциплин -->
+            <Border Grid.Column="1" 
+                    Background="White" 
+                    CornerRadius="8" 
+                    Padding="15"
+                    Margin="10,0,0,0"
+                    BorderBrush="#3498db" 
+                    BorderThickness="2">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <TextBlock Grid.Row="0" 
+                               Text="ДОБАВИТЬ ДИСЦИПЛИНУ" 
+                               FontSize="16" 
+                               FontWeight="Bold"
+                               Foreground="#3498db"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,10"/>
+                    
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Выберите дисциплину:" 
+                                       FontWeight="SemiBold"
+                                       FontSize="13"
+                                       Foreground="#2c3e50"/>
+                            
+                            <ComboBox ItemsSource="{Binding AvailableDisciplines}"
+                                      SelectedItem="{Binding SelectedDisciplineToAdd}"
+                                      Background="#F0F0F0"
+                                      FontSize="13"
+                                      Height="40">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock>
+                                            <Run Text="{Binding Name}"/>
+                                            <Run Text=" ("/>
+                                            <Run Text="{Binding Course}"/>
+                                            <Run Text=" курс, "/>
+                                            <Run Text="{Binding Semester}"/>
+                                            <Run Text=" сем.)"/>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            
+                            <TextBlock Text="{Binding ErrorMessage}" 
+                                       Foreground="Red" 
+                                       FontSize="12" 
+                                       TextWrapping="Wrap"
+                                       Margin="0,5,0,0"
+                                       IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                    
+                    <Button Grid.Row="2"
+                            Content="ДОБАВИТЬ"
+                            Command="{Binding AddDisciplineCommand}"
+                            Background="#27ae60"
+                            Foreground="White"
+                            FontSize="13"
+                            FontWeight="Bold"
+                            Padding="10"
+                            BorderThickness="0"
+                            Margin="0,10,0,0"/>
+                </Grid>
+            </Border>
+            
+        </Grid>
+    </Grid>
+    
+</UserControl>
+

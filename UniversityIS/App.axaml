@@ -1,0 +1,91 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="UniversityIS.App"
+             xmlns:local="using:UniversityIS"
+             RequestedThemeVariant="Default">
+             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+  
+    <Application.Styles>
+        <FluentTheme />
+        
+        <!-- Глобальные стили для полей ввода -->
+        <Style Selector="TextBox">
+            <Setter Property="Foreground" Value="#2c3e50"/>
+        </Style>
+        <Style Selector="TextBox:pointerover">
+            <Setter Property="Background" Value="#E3F2FD"/>
+        </Style>
+        <Style Selector="TextBox:focus">
+            <Setter Property="Background" Value="#BBDEFB"/>
+            <Setter Property="BorderBrush" Value="#2196F3"/>
+        </Style>
+        
+        <Style Selector="NumericUpDown">
+            <Setter Property="Foreground" Value="#2c3e50"/>
+        </Style>
+        <Style Selector="NumericUpDown:pointerover /template/ Border">
+            <Setter Property="Background" Value="#E3F2FD"/>
+        </Style>
+        <Style Selector="NumericUpDown:focus /template/ Border">
+            <Setter Property="Background" Value="#BBDEFB"/>
+            <Setter Property="BorderBrush" Value="#2196F3"/>
+        </Style>
+        
+        <Style Selector="ComboBox">
+            <Setter Property="Foreground" Value="#2c3e50"/>
+        </Style>
+        <Style Selector="ComboBox:pointerover /template/ Border">
+            <Setter Property="Background" Value="#E3F2FD"/>
+        </Style>
+        <Style Selector="ComboBox:focus /template/ Border">
+            <Setter Property="Background" Value="#BBDEFB"/>
+            <Setter Property="BorderBrush" Value="#2196F3"/>
+        </Style>
+        
+        <!-- Стили для кнопок - прозрачность при наведении -->
+        <Style Selector="Button:pointerover /template/ ContentPresenter">
+            <Setter Property="Opacity" Value="0.85"/>
+        </Style>
+        <Style Selector="Button:pressed /template/ ContentPresenter">
+            <Setter Property="Opacity" Value="0.7"/>
+        </Style>
+        
+        <!-- Альтернативный подход - изменение фона напрямую -->
+        <Style Selector="Button:pointerover">
+            <Setter Property="RenderTransform" Value="scale(1.02)"/>
+        </Style>
+        
+        <!-- Стили для улучшения читаемости текста в списках и карточках -->
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="#2c3e50"/>
+        </Style>
+        <Style Selector="ListBoxItem TextBlock">
+            <Setter Property="Foreground" Value="#2c3e50"/>
+        </Style>
+        <Style Selector="Border TextBlock">
+            <Setter Property="Foreground" Value="#2c3e50"/>
+        </Style>
+        
+        <!-- Стили для CheckBox - темный текст и видимые рамки -->
+        <Style Selector="CheckBox">
+            <Setter Property="Foreground" Value="#2c3e50"/>
+        </Style>
+        <Style Selector="CheckBox /template/ Border#NormalRectangle">
+            <Setter Property="BorderBrush" Value="#2c3e50"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="Background" Value="White"/>
+        </Style>
+        <Style Selector="CheckBox:pointerover /template/ Border#NormalRectangle">
+            <Setter Property="BorderBrush" Value="#3498db"/>
+            <Setter Property="Background" Value="#E3F2FD"/>
+        </Style>
+        <Style Selector="CheckBox:checked /template/ Border#NormalRectangle">
+            <Setter Property="BorderBrush" Value="#27ae60"/>
+            <Setter Property="Background" Value="#d4edda"/>
+        </Style>
+    </Application.Styles>
+</Application>

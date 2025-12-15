@@ -1,0 +1,156 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:UniversityIS.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:views="using:UniversityIS.Views"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
+        x:Class="UniversityIS.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="Информационная система ВУЗа"
+        Width="1200" Height="700">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Grid ColumnDefinitions="220,*">
+        <!-- Боковое меню навигации -->
+        <Border Grid.Column="0" Background="#1a1a2e" Padding="15">
+            <StackPanel Spacing="8">
+                <TextBlock Text="НАВИГАЦИЯ" 
+                           Foreground="#eee" 
+                           FontSize="16" 
+                           FontWeight="Bold" 
+                           Margin="0,0,0,15"
+                           HorizontalAlignment="Center"/>
+                
+                <Button Content="Факультеты" 
+                        Command="{Binding ShowFacultiesCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="#3498db"
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Padding="10,8"/>
+                
+                <Button Content="Кафедры" 
+                        Command="{Binding ShowDepartmentsCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="#3498db"
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Padding="10,8"/>
+                
+                <Button Content="Группы" 
+                        Command="{Binding ShowGroupsCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="#3498db"
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Padding="10,8"/>
+                
+                <Button Content="Студенты" 
+                        Command="{Binding ShowStudentsCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="#3498db"
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Padding="10,8"/>
+                
+                <Button Content="Преподаватели" 
+                        Command="{Binding ShowTeachersCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="#3498db"
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Padding="10,8"/>
+                
+                <Button Content="Дисциплины" 
+                        Command="{Binding ShowDisciplinesCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="#3498db"
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Padding="10,8"/>
+                
+                <Button Content="Нагрузка" 
+                        Command="{Binding ShowWorkLoadsCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="#3498db"
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Padding="10,8"/>
+                
+                <Button Content="Дипломные работы" 
+                        Command="{Binding ShowThesisWorksCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="#3498db"
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Padding="10,8"/>
+                
+                <Separator Margin="0,15,0,15" Background="#444" Height="2"/>
+                
+                <Button Content="СОХРАНИТЬ ДАННЫЕ" 
+                        Command="{Binding SaveDataCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Background="#27ae60"
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="Bold"
+                        Padding="10,12"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Основное содержимое -->
+        <Border Grid.Column="1" Background="#f5f5f5" Padding="20">
+            <ContentControl Content="{Binding CurrentPage}">
+                <ContentControl.DataTemplates>
+                    <DataTemplate DataType="vm:FacultiesViewModel">
+                        <views:FacultiesView />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:DepartmentsViewModel">
+                        <views:DepartmentsView />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:GroupsViewModel">
+                        <views:GroupsView />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:StudentsViewModel">
+                        <views:StudentsView />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:TeachersViewModel">
+                        <views:TeachersView />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:DisciplinesViewModel">
+                        <views:DisciplinesView />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:WorkLoadsViewModel">
+                        <views:WorkLoadsView />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:ThesisWorksViewModel">
+                        <views:ThesisWorksView />
+                    </DataTemplate>
+                </ContentControl.DataTemplates>
+            </ContentControl>
+        </Border>
+    </Grid>
+
+</Window>
