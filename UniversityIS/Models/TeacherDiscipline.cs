@@ -6,21 +6,13 @@ namespace UniversityIS.Models
     // Модель связи преподавателя с дисциплиной
     // Определяет, какие дисциплины может вести конкретный преподаватель
     // Используется для фильтрации дисциплин при добавлении учебной нагрузки
-    public class TeacherDiscipline : ReactiveObject
+    public class TeacherDiscipline : ModelBase
     {
-        private Guid _id;
         private Guid _teacherId;
         private Guid _disciplineId;
 
         public TeacherDiscipline()
         {
-            Id = Guid.NewGuid();
-        }
-
-        public Guid Id
-        {
-            get => _id;
-            set => this.RaiseAndSetIfChanged(ref _id, value);
         }
 
         public Guid TeacherId
@@ -35,7 +27,7 @@ namespace UniversityIS.Models
             set => this.RaiseAndSetIfChanged(ref _disciplineId, value);
         }
 
-        public string ToFileString()
+        public override string ToFileString()
         {
             return $"{Id}|{TeacherId}|{DisciplineId}";
         }

@@ -6,9 +6,8 @@ namespace UniversityIS.Models
     // Модель оценки студента по дисциплине
     // Хранит баллы за семестр и экзамен/зачет, автоматически рассчитывает итоговую оценку
     // Система оценивания: экзамен (60+40), зачет (80+20), дифзачет (80+20)
-    public class StudentGrade : ReactiveObject
+    public class StudentGrade : ModelBase
     {
-        private Guid _id;
         private Guid _studentId;
         private Guid _disciplineId;
         private int _semesterPoints;
@@ -18,13 +17,6 @@ namespace UniversityIS.Models
 
         public StudentGrade()
         {
-            Id = Guid.NewGuid();
-        }
-
-        public Guid Id
-        {
-            get => _id;
-            set => this.RaiseAndSetIfChanged(ref _id, value);
         }
 
         public Guid StudentId
@@ -98,7 +90,7 @@ namespace UniversityIS.Models
             }
         }
 
-        public string ToFileString()
+        public override string ToFileString()
         {
             return $"{Id}|{StudentId}|{DisciplineId}|{SemesterPoints}|{ExamPoints}|{TotalPoints}|{Grade}";
         }

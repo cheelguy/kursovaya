@@ -6,19 +6,11 @@ using ReactiveUI;
 namespace UniversityIS.Models
 {
     // Кафедра
-    public class Department : ReactiveObject
+    public class Department : ModelBase
     {
-        private Guid _id;
         private string _name = string.Empty;
         private string _head = string.Empty;
         private Guid _facultyId;
-        
-        // Уникальный идентификатор
-        public Guid Id 
-        { 
-            get => _id;
-            set => this.RaiseAndSetIfChanged(ref _id, value);
-        }
         
         // Название кафедры
         public string Name 
@@ -46,7 +38,6 @@ namespace UniversityIS.Models
         
         public Department()
         {
-            Id = Guid.NewGuid();
             Name = string.Empty;
             Head = string.Empty;
             FacultyId = Guid.Empty;
@@ -59,7 +50,7 @@ namespace UniversityIS.Models
         }
         
         // Сохранение в строку для текстового файла
-        public string ToFileString()
+        public override string ToFileString()
         {
             return $"{Id}|{Name}|{Head}|{FacultyId}|{string.Join(",", TeacherIds)}";
         }

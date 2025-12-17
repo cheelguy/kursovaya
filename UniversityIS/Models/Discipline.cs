@@ -6,9 +6,8 @@ namespace UniversityIS.Models
     // Модель учебной дисциплины
     // Содержит информацию о предмете: название, курс, семестр, часы, форма контроля
     // Дисциплина привязана к конкретной группе
-    public class Discipline : ReactiveObject
+    public class Discipline : ModelBase
     {
-        private Guid _id;
         private string _name = string.Empty;
         private int _course;
         private int _semester;
@@ -17,15 +16,6 @@ namespace UniversityIS.Models
         private int _laboratoryHours;
         private ControlForm _controlForm;
         private Guid _groupId;
-        
-        
-        // Уникальный идентификатор
-        
-        public Guid Id 
-        { 
-            get => _id;
-            set => this.RaiseAndSetIfChanged(ref _id, value);
-        }
         
         
         // Название дисциплины
@@ -101,7 +91,6 @@ namespace UniversityIS.Models
         
         public Discipline()
         {
-            Id = Guid.NewGuid();
             Name = string.Empty;
             Course = 1;
             Semester = 1;
@@ -133,7 +122,7 @@ namespace UniversityIS.Models
         
         // Преобразует объект дисциплины в строку для сохранения в текстовый файл
         // Формат: Id|Name|Course|Semester|LectureHours|SeminarHours|LaboratoryHours|ControlForm|GroupId
-        public string ToFileString()
+        public override string ToFileString()
         {
             return $"{Id}|{Name}|{Course}|{Semester}|{LectureHours}|{SeminarHours}|{LaboratoryHours}|{(int)ControlForm}|{GroupId}";
         }

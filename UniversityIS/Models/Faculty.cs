@@ -7,18 +7,10 @@ namespace UniversityIS.Models
 {
     // Модель факультета университета
     // Содержит информацию о факультете: название, декан, список групп и кафедр
-    public class Faculty : ReactiveObject
+    public class Faculty : ModelBase
     {
-        private Guid _id;
         private string _name = string.Empty;
         private string _dean = string.Empty;
-        
-        // Уникальный идентификатор факультета
-        public Guid Id 
-        { 
-            get => _id;
-            set => this.RaiseAndSetIfChanged(ref _id, value);
-        }
         
         // Название факультета
         public string Name 
@@ -42,7 +34,6 @@ namespace UniversityIS.Models
         
         public Faculty()
         {
-            Id = Guid.NewGuid();
             Name = string.Empty;
             Dean = string.Empty;
             GroupIds = new List<Guid>();
@@ -56,7 +47,7 @@ namespace UniversityIS.Models
         
         // Преобразует объект факультета в строку для сохранения в текстовый файл
         // Формат: Id|Name|Dean|GroupIds|DepartmentIds
-        public string ToFileString()
+        public override string ToFileString()
         {
             return $"{Id}|{Name}|{Dean}|{string.Join(",", GroupIds)}|{string.Join(",", DepartmentIds)}";
         }

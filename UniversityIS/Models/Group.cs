@@ -6,20 +6,12 @@ using ReactiveUI;
 namespace UniversityIS.Models
 {
     // Учебная группа
-    public class Group : ReactiveObject
+    public class Group : ModelBase
     {
-        private Guid _id;
         private string _number = string.Empty;
         private int _yearOfAdmission;
         private int _course;
         private Guid _facultyId;
-        
-        // Уникальный идентификатор
-        public Guid Id 
-        { 
-            get => _id;
-            set => this.RaiseAndSetIfChanged(ref _id, value);
-        }
         
         // Номер группы
         public string Number 
@@ -54,7 +46,6 @@ namespace UniversityIS.Models
         
         public Group()
         {
-            Id = Guid.NewGuid();
             Number = string.Empty;
             YearOfAdmission = DateTime.Now.Year;
             Course = 1;
@@ -68,7 +59,7 @@ namespace UniversityIS.Models
         }
         
         // Сохранение в строку для текстового файла
-        public string ToFileString()
+        public override string ToFileString()
         {
             return $"{Id}|{Number}|{YearOfAdmission}|{Course}|{FacultyId}|{string.Join(",", StudentIds)}";
         }

@@ -4,9 +4,8 @@ using ReactiveUI;
 namespace UniversityIS.Models
 {
     // Преподаватель
-    public class Teacher : ReactiveObject
+    public class Teacher : ModelBase
     {
-        private Guid _id;
         private string _lastName = string.Empty;
         private string _firstName = string.Empty;
         private string _middleName = string.Empty;
@@ -17,13 +16,6 @@ namespace UniversityIS.Models
         private bool _isPostgraduate;
         private bool _leadsResearchTopics;
         private bool _leadsResearchDirections;
-        
-        // Уникальный идентификатор
-        public Guid Id 
-        { 
-            get => _id;
-            set => this.RaiseAndSetIfChanged(ref _id, value);
-        }
         
         // Фамилия
         public string LastName 
@@ -97,7 +89,6 @@ namespace UniversityIS.Models
         
         public Teacher()
         {
-            Id = Guid.NewGuid();
             LastName = string.Empty;
             FirstName = string.Empty;
             MiddleName = string.Empty;
@@ -161,7 +152,7 @@ namespace UniversityIS.Models
         }
         
         // Сохранение в строку для текстового файла
-        public string ToFileString()
+        public override string ToFileString()
         {
             return $"{Id}|{LastName}|{FirstName}|{MiddleName}|{(int)Position}|{(int)Degree}|" +
                    $"{(int)Title}|{DepartmentId}|{IsPostgraduate}|{LeadsResearchTopics}|{LeadsResearchDirections}";

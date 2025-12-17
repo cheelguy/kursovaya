@@ -6,9 +6,8 @@ namespace UniversityIS.Models
     // Модель учебной нагрузки преподавателя
     // Описывает, какой преподаватель ведет какой предмет у какой группы
     // Содержит информацию о типе занятий (лекции, семинары, лабораторные) и количестве часов
-    public class WorkLoad : ReactiveObject
+    public class WorkLoad : ModelBase
     {
-        private Guid _id;
         private Guid _teacherId;
         private Guid _disciplineId;
         private Guid _groupId;
@@ -16,15 +15,6 @@ namespace UniversityIS.Models
         private int _hours;
         private string _academicYear = string.Empty;
         private int _semester;
-        
-        
-        // Уникальный идентификатор
-        
-        public Guid Id 
-        { 
-            get => _id;
-            set => this.RaiseAndSetIfChanged(ref _id, value);
-        }
         
         
         // Идентификатор преподавателя
@@ -91,7 +81,6 @@ namespace UniversityIS.Models
         
         public WorkLoad()
         {
-            Id = Guid.NewGuid();
             TeacherId = Guid.Empty;
             DisciplineId = Guid.Empty;
             GroupId = Guid.Empty;
@@ -101,10 +90,8 @@ namespace UniversityIS.Models
             Semester = 1;
         }
         
-        
         // Сохранение в строку для текстового файла
-        
-        public string ToFileString()
+        public override string ToFileString()
         {
             return $"{Id}|{TeacherId}|{DisciplineId}|{GroupId}|{(int)LessonType}|{Hours}|{AcademicYear}|{Semester}";
         }

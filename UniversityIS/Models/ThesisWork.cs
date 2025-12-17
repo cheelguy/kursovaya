@@ -3,26 +3,14 @@ using ReactiveUI;
 
 namespace UniversityIS.Models
 {
-    
     // Дипломная работа
-    
-    public class ThesisWork : ReactiveObject
+    public class ThesisWork : ModelBase
     {
-        private Guid _id;
         private string _title = string.Empty;
         private Guid _studentId;
         private Guid _supervisorId;
         private int _year;
         private string _grade = string.Empty;
-        
-        
-        // Уникальный идентификатор
-        
-        public Guid Id 
-        { 
-            get => _id;
-            set => this.RaiseAndSetIfChanged(ref _id, value);
-        }
         
         
         // Название работы
@@ -71,7 +59,6 @@ namespace UniversityIS.Models
         
         public ThesisWork()
         {
-            Id = Guid.NewGuid();
             Title = string.Empty;
             StudentId = Guid.Empty;
             SupervisorId = Guid.Empty;
@@ -79,10 +66,8 @@ namespace UniversityIS.Models
             Grade = null;
         }
         
-        
         // Сохранение в строку для текстового файла
-        
-        public string ToFileString()
+        public override string ToFileString()
         {
             return $"{Id}|{Title}|{StudentId}|{SupervisorId}|{Year}|{_grade}";
         }
