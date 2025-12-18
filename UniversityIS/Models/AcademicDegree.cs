@@ -1,23 +1,13 @@
 namespace UniversityIS.Models
 {
-    
     // Учёная степень
-    
     public enum AcademicDegree
     {
-        
         // Без степени
-        
         None,
-        
-        
         // Кандидат наук
-        
-        CandidateOfSciences,
-        
-        
+        CandidateOfSciences, 
         // Доктор наук
-        
         DoctorOfSciences
     }
 }

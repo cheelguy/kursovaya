@@ -5,10 +5,8 @@ namespace UniversityIS.Models
     {
         // Зачёт
         Pass,
-        
         // Дифференцированный зачёт
         DifferentiatedPass,
-        
         // Экзамен
         Exam
     }
